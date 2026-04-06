@@ -124,6 +124,11 @@ _STRINGS: dict = {
         "s0.presets":     "Preset sizes :",
         "s0.proj":        "Projects :",
         "s0.std":         "Standard :",
+        "s0.analyze":     "🔍  Analyse reference image…",
+        "s0.analyze_hint": "Extract position, colour and font size from an existing numbered image.",
+        "anal.title":     "Extracted settings",
+        "anal.dlg":       "Select reference image",
+        "anal.none":      "Could not detect any text in this image. Try with a cleaner image.",
         # Step 1 — Background
         "s1.title":       "Image background",
         "s1.color":       "Solid colour",
@@ -148,6 +153,8 @@ _STRINGS: dict = {
         "s2.family":      "Family :",
         "s2.style":       "Style    :",
         "s2.size":        "  Size :",
+        "s2.tracking":    "  Tracking :",
+        "s2.tracking_hint": "Letter spacing  (0 = default, negative = tighter, positive = looser)",
         "s2.px":          "px",
         "s2.preview_btn": "🔍  Preview fonts",
         "s2.mode_lbl":    "Size mode :",
@@ -287,6 +294,11 @@ _STRINGS: dict = {
         "s0.presets":     "プリセット :",
         "s0.proj":        "プロジェクト :",
         "s0.std":         "標準 :",
+        "s0.analyze":     "🔍  参考画像を解析…",
+        "s0.analyze_hint": "既存の番号画像から位置・色・フォントサイズを抜き出します。",
+        "anal.title":     "設定を抽出しました",
+        "anal.dlg":       "参考画像を選択",
+        "anal.none":      "画像からテキストを検出できませんでした。",
         # Step 1 — Background
         "s1.title":       "画像の背景",
         "s1.color":       "単色",
@@ -311,6 +323,8 @@ _STRINGS: dict = {
         "s2.family":      "ファミリー :",
         "s2.style":       "スタイル  :",
         "s2.size":        "  サイズ :",
+        "s2.tracking":    "  トラッキング :",
+        "s2.tracking_hint": "文字間距（0=デフォルト，負=素·正=適）",
         "s2.px":          "px",
         "s2.preview_btn": "🔍  フォントプレビュー",
         "s2.mode_lbl":    "サイズモード :",
@@ -2496,12 +2510,31 @@ def _parse_num_list(s: str) -> list:
     return result
 
 
+def _draw_tracked(drw, text, fnt, cx, cy, fill_rgba, tracking):
+    """Draw text centered at (cx,cy) with per-character letter spacing."""
+    if not text:
+        return
+    advances = []
+    for ch in text:
+        try:
+            adv = fnt.getlength(ch)
+        except AttributeError:
+            bb = drw.textbbox((0, 0), ch, font=fnt)
+            adv = bb[2] - bb[0]
+        advances.append(int(adv))
+    total_w = sum(advances) + tracking * (len(text) - 1)
+    x = cx - total_w // 2
+    for ch, adv in zip(text, advances):
+        drw.text((x, cy), ch, fill=fill_rgba, font=fnt, anchor="lm")
+        x += adv + tracking
+
+
 def _gen_image(number, width, height, bg_mode, bg_color, bg_image_path,
                text_color, font_name, font_size, corner_mode, corner_radius,
                shadow_on=False, shadow_color="#000000", shadow_offset_x=4, shadow_offset_y=4,
                shadow_blur=3,
                pos_manual=False, pos_x=None, pos_y=None,
-               auto_fit=False):
+               auto_fit=False, letter_spacing=0):
     from PIL import Image as _Img, ImageDraw as _IDrw, ImageFilter as _IFilt
     if bg_mode == "color":
         rgb = _hex_to_rgb(bg_color)
@@ -2521,28 +2554,39 @@ def _gen_image(number, width, height, bg_mode, bg_color, bg_image_path,
                 _tw, _th = _bb[2] - _bb[0], _bb[3] - _bb[1]
             except AttributeError:
                 _tw, _th = draw.textsize(text, font=_f)
+            # Account for tracking in width check
+            if letter_spacing != 0:
+                _tw += letter_spacing * max(0, len(text) - 1)
             if _tw <= max_tw and _th <= max_th:
                 break
             font_size -= 2
     font = _load_pil_font(font_name, font_size)
-    # Centre point — anchor="mm" draws text centred exactly on (cx, cy),
-    # giving identical positional behaviour for "1", "10", "100" etc.
+    # Centre point
     if pos_manual and pos_x is not None and pos_y is not None:
         cx, cy = int(pos_x), int(pos_y)
     else:
         cx, cy = width // 2, height // 2
     # Drop-shadow
     if shadow_on:
-        sh_rgb   = _hex_to_rgb(shadow_color) + (200,)
+        sh_rgba  = _hex_to_rgb(shadow_color) + (200,)
         sh_layer = _Img.new("RGBA", img.size, (0, 0, 0, 0))
         sh_draw  = _IDrw.Draw(sh_layer)
-        sh_draw.text((cx + int(shadow_offset_x), cy + int(shadow_offset_y)),
-                     text, fill=sh_rgb, font=font, anchor="mm")
+        if letter_spacing != 0:
+            _draw_tracked(sh_draw, text, font,
+                          cx + int(shadow_offset_x), cy + int(shadow_offset_y),
+                          sh_rgba, letter_spacing)
+        else:
+            sh_draw.text((cx + int(shadow_offset_x), cy + int(shadow_offset_y)),
+                         text, fill=sh_rgba, font=font, anchor="mm")
         if shadow_blur > 0:
             sh_layer = sh_layer.filter(_IFilt.GaussianBlur(radius=max(1, int(shadow_blur))))
         img = _Img.alpha_composite(img, sh_layer)
         draw = _IDrw.Draw(img)
-    draw.text((cx, cy), text, fill=_hex_to_rgb(text_color) + (255,), font=font, anchor="mm")
+    text_rgba = _hex_to_rgb(text_color) + (255,)
+    if letter_spacing != 0:
+        _draw_tracked(draw, text, font, cx, cy, text_rgba, letter_spacing)
+    else:
+        draw.text((cx, cy), text, fill=text_rgba, font=font, anchor="mm")
     if corner_mode == "rounded" and corner_radius > 0:
         img = _apply_rounded_mask(img, corner_radius)
     return img  # always RGBA
@@ -2709,6 +2753,7 @@ class ImageGenWizard(tk.Toplevel):
         self._font_var    = tk.StringVar(value="Impact")  # display name (compat)
         self._fsize       = tk.StringVar(value="120")
         self._tcol        = tk.StringVar(value="#ffffff")
+        self._tracking    = tk.IntVar(value=0)   # letter spacing in pixels
 
         # Drop-shadow
         self._shadow_on      = tk.BooleanVar(value=False)
@@ -2820,7 +2865,7 @@ class ImageGenWizard(tk.Toplevel):
             self._num_list, self._font_path, self._fsize, self._tcol,
             self._shadow_col, self._shadow_ox, self._shadow_oy, self._shadow_blur,
             self._pos_x, self._pos_y,
-            self._corner, self._radius, self._guide_margin,
+            self._corner, self._radius, self._guide_margin, self._tracking,
         ]
         for var in watch:
             var.trace_add("write", lambda *_: self._schedule_preview())
@@ -2872,6 +2917,7 @@ class ImageGenWizard(tk.Toplevel):
             pos_x=int(self._pos_x.get() or 0),
             pos_y=int(self._pos_y.get() or 0),
             auto_fit=self._auto_fsize.get(),
+            letter_spacing=self._tracking.get(),
         )
         guide_on     = self._guide_on.get()
         guide_margin = self._guide_margin.get()
@@ -3058,7 +3104,140 @@ class ImageGenWizard(tk.Toplevel):
                 self._w_var.set(str(ww))
                 self._h_var.set(str(hh))
             btn(row2, lbl_txt, _apply, primary=False).pack(side="left", padx=3)
+
+        separator(p).pack(fill="x", pady=(14, 10))
+        anal_row = styled_frame(p)
+        anal_row.pack(anchor="w", fill="x")
+        btn(anal_row, _t("s0.analyze"), self._analyse_ref_image,
+            primary=False).pack(side="left")
+        label(anal_row, _t("s0.analyze_hint"),
+              fg=FG2, font=FONT_SM).pack(side="left", padx=(10, 0))
         return p
+
+    def _analyse_ref_image(self):
+        """Load a reference image and extract canvas size, text colour,
+        approximate font size, position, and drop-shadow into the wizard."""
+        path = filedialog.askopenfilename(
+            parent=self, title=_t("anal.dlg"),
+            filetypes=[("Images", "*.jpg *.jpeg *.png *.bmp *.webp"), ("Tous", "*.*")])
+        if not path:
+            return
+        try:
+            from PIL import Image as _Img
+            img = _Img.open(path).convert("RGBA")
+        except Exception as e:
+            messagebox.showerror("Error", str(e), parent=self)
+            return
+
+        W, H = img.size
+        # Set canvas size from the image
+        self._link_wh.set(False)
+        self._w_var.set(str(W))
+        self._h_var.set(str(H))
+
+        # Sample background from the 10-px border (corners + edges)
+        rgb_img = img.convert("RGB")
+        border_pix = []
+        bw = min(10, W // 4)
+        bh = min(10, H // 4)
+        for x in range(W):
+            for y in range(bh):
+                border_pix.append(rgb_img.getpixel((x, y)))
+            for y in range(H - bh, H):
+                border_pix.append(rgb_img.getpixel((x, y)))
+        for y in range(H):
+            for x in range(bw):
+                border_pix.append(rgb_img.getpixel((x, y)))
+            for x in range(W - bw, W):
+                border_pix.append(rgb_img.getpixel((x, y)))
+        bg_r = round(sum(c[0] for c in border_pix) / len(border_pix))
+        bg_g = round(sum(c[1] for c in border_pix) / len(border_pix))
+        bg_b = round(sum(c[2] for c in border_pix) / len(border_pix))
+
+        # Find pixels that differ significantly from background
+        THRESH = 35
+        text_pix, dark_pix = [], []
+        data = list(rgb_img.getdata())
+        bg_brightness = (bg_r + bg_g + bg_b) / 3
+        for i, (r, g, b) in enumerate(data):
+            dist = ((r-bg_r)**2 + (g-bg_g)**2 + (b-bg_b)**2) ** 0.5
+            if dist < THRESH:
+                continue
+            x, y = i % W, i // W
+            brightness = (r + g + b) / 3
+            if brightness >= bg_brightness:
+                text_pix.append((x, y, r, g, b))
+            else:
+                dark_pix.append((x, y, r, g, b))
+
+        all_pix = text_pix + dark_pix
+        if not all_pix:
+            messagebox.showinfo(_t("anal.title"), _t("anal.none"), parent=self)
+            return
+
+        # Bounding box → position + font size estimate
+        xs = [p[0] for p in all_pix]
+        ys = [p[1] for p in all_pix]
+        cx = (min(xs) + max(xs)) // 2
+        cy = (min(ys) + max(ys)) // 2
+        bbox_h = max(ys) - min(ys)
+        font_est = max(8, int(bbox_h * 0.82))
+
+        # Dominant text colour (from bright pixels)
+        src = text_pix if text_pix else all_pix
+        color_counts: dict = {}
+        for _, _, r, g, b in src:
+            key = (r >> 4 << 4, g >> 4 << 4, b >> 4 << 4)
+            color_counts[key] = color_counts.get(key, 0) + 1
+        dom = max(color_counts, key=color_counts.get)
+        bucket = [(r, g, b) for _, _, r, g, b in src
+                  if (r >> 4, g >> 4, b >> 4) == (dom[0] >> 4, dom[1] >> 4, dom[2] >> 4)]
+        ar = round(sum(p[0] for p in bucket) / len(bucket))
+        ag = round(sum(p[1] for p in bucket) / len(bucket))
+        ab = round(sum(p[2] for p in bucket) / len(bucket))
+        text_color = f"#{ar:02x}{ag:02x}{ab:02x}"
+
+        # Shadow detection: dark pixels offset from text centroid
+        shadow_on, sh_ox, sh_oy, sh_col = False, 4, 4, "#000000"
+        if dark_pix and len(dark_pix) > 20:
+            tx_cx = sum(p[0] for p in all_pix) / len(all_pix)
+            tx_cy = sum(p[1] for p in all_pix) / len(all_pix)
+            dk_cx = sum(p[0] for p in dark_pix) / len(dark_pix)
+            dk_cy = sum(p[1] for p in dark_pix) / len(dark_pix)
+            off_x = round(dk_cx - tx_cx)
+            off_y = round(dk_cy - tx_cy)
+            if abs(off_x) >= 2 or abs(off_y) >= 2:
+                shadow_on = True
+                sh_ox, sh_oy = off_x, off_y
+                sr = round(sum(p[2] for p in dark_pix) / len(dark_pix))
+                sg = round(sum(p[3] for p in dark_pix) / len(dark_pix))
+                sb_ = round(sum(p[4] for p in dark_pix) / len(dark_pix))
+                sh_col = f"#{sr:02x}{sg:02x}{sb_:02x}"
+
+        # Apply extracted values to wizard
+        self._pos_manual.set(True)
+        self._pos_x.set(str(cx))
+        self._pos_y.set(str(cy))
+        self._fsize.set(str(font_est))
+        self._auto_fsize.set(False)
+        self._tcol.set(text_color)
+        if shadow_on:
+            self._shadow_on.set(True)
+            self._shadow_ox.set(str(sh_ox))
+            self._shadow_oy.set(str(sh_oy))
+            self._shadow_col.set(sh_col)
+
+        self._schedule_preview()
+
+        lines = [
+            f"Canvas     :  {W} × {H} px",
+            f"Position   :  ({cx}, {cy})",
+            f"Font size  :  ~{font_est} px",
+            f"Text colour:  {text_color}",
+        ]
+        if shadow_on:
+            lines.append(f"Shadow     :  offset ({sh_ox}, {sh_oy})  colour {sh_col}")
+        messagebox.showinfo(_t("anal.title"), "\n".join(lines), parent=self)
 
     # ── Step 1 · Background ───────────────────────────────────────────────────
     # ── Preset helpers ────────────────────────────────────────────────────────
@@ -3083,6 +3262,7 @@ class ImageGenWizard(tk.Toplevel):
             "prefix": self._prefix.get(), "suffix": self._suffix.get(),
             "out_folder": self._out_folder.get(),
             "guide_on": self._guide_on.get(), "guide_margin": self._guide_margin.get(),
+            "tracking": self._tracking.get(),
         }
 
     def _apply_preset(self, state: dict):
@@ -3112,6 +3292,8 @@ class ImageGenWizard(tk.Toplevel):
             if key in state: bvar.set(bool(state[key]))
         if "guide_margin" in state:
             self._guide_margin.set(int(state["guide_margin"]))
+        if "tracking" in state:
+            self._tracking.set(int(state["tracking"]))
         self._update_font_path()
         self._update_preview()
 
@@ -3386,6 +3568,13 @@ class ImageGenWizard(tk.Toplevel):
                  insertbackground=FG, relief="flat", font=FONT_BODY, width=6
                  ).pack(side="left", padx=4)
         label(row_sty, "px", fg=FG2, font=FONT_SM).pack(side="left")
+        label(row_sty, _t("s2.tracking")).pack(side="left", padx=(16, 0))
+        tk.Spinbox(row_sty, textvariable=self._tracking,
+                   from_=-500, to=500, increment=1, width=5,
+                   bg=BG3, fg=FG, insertbackground=FG, relief="flat",
+                   buttonbackground=BG3, font=FONT_BODY).pack(side="left", padx=4)
+        label(row_sty, "px", fg=FG2, font=FONT_SM).pack(side="left")
+        label(inner, _t("s2.tracking_hint"), fg=FG2, font=FONT_SM).pack(anchor="w", pady=(0, 2))
 
         # Initialise style list for default family
         self._refresh_style_cb()
@@ -4105,6 +4294,7 @@ class ImageGenWizard(tk.Toplevel):
         p_x      = int(self._pos_x.get() or 0)
         p_y      = int(self._pos_y.get() or 0)
         auto_fit = self._auto_fsize.get()
+        tracking = self._tracking.get()
 
         bg_pattern = list(self._bg_pattern)  # snapshot for thread
 
@@ -4128,7 +4318,7 @@ class ImageGenWizard(tk.Toplevel):
                                      shadow_offset_x=sh_ox, shadow_offset_y=sh_oy,
                                      shadow_blur=sh_bl,
                                      pos_manual=p_man, pos_x=p_x, pos_y=p_y,
-                                     auto_fit=auto_fit)
+                                     auto_fit=auto_fit, letter_spacing=tracking)
                     dest = out_dir / f"{prefix}{number}{suffix}{ext}"
                     if fmt == "JPEG":
                         from PIL import Image as _Img
