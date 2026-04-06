@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Debug / temp files
+_debug_*.py
+crash*.log
+startup_debug.log
+_igw_presets.json
+
+# OS
+Thumbs.db
+.DS_Store
