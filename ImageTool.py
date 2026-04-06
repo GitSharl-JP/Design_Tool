@@ -2293,6 +2293,7 @@ class ColorPickerDialog(tk.Toplevel):
 #  IMAGE GENERATOR  —  numbered image batch creator
 # =============================================================================
 _FONTS_DIR = Path("C:/Windows/Fonts")
+_FONTS_DIR_USER = Path(os.path.expanduser("~")) / "AppData" / "Local" / "Microsoft" / "Windows" / "Fonts"
 
 
 def _read_font_name(path: str):
@@ -2364,23 +2365,25 @@ def _discover_font_families() -> dict:
                   'Heavy', 'Condensed', 'Expanded', 'Oblique', 'Regular',
                   'Semibold', 'SemiBold', 'ExtraBold', 'ExtraLight', 'Narrow')
     families: dict = {}
-    for ext in ("*.ttf", "*.otf", "*.TTF", "*.OTF"):
-        for p in sorted(_FONTS_DIR.glob(ext)):
-            fam, sty = _read_font_name(str(p))
-            if not fam:                   # fallback: parse filename
-                raw = re.sub(r'([a-z])([A-Z])', r'\1 \2',
-                             re.sub(r'[-_]', ' ', p.stem)).strip()
-                sty, fam = 'Regular', raw
-                for kw in _style_kws:
-                    if raw.lower().endswith(' ' + kw.lower()):
-                        sty = kw
-                        fam = raw[:-(len(kw) + 1)].strip()
-                        break
-            fam = (fam or p.stem).strip()
-            sty = (sty or 'Regular').strip()
-            families.setdefault(fam, {})
-            if sty not in families[fam]:   # first file wins
-                families[fam][sty] = str(p)
+    font_dirs = [d for d in [_FONTS_DIR, _FONTS_DIR_USER] if d.exists()]
+    for font_dir in font_dirs:
+        for ext in ("*.ttf", "*.otf", "*.TTF", "*.OTF"):
+            for p in sorted(font_dir.glob(ext)):
+                fam, sty = _read_font_name(str(p))
+                if not fam:                   # fallback: parse filename
+                    raw = re.sub(r'([a-z])([A-Z])', r'\1 \2',
+                                 re.sub(r'[-_]', ' ', p.stem)).strip()
+                    sty, fam = 'Regular', raw
+                    for kw in _style_kws:
+                        if raw.lower().endswith(' ' + kw.lower()):
+                            sty = kw
+                            fam = raw[:-(len(kw) + 1)].strip()
+                            break
+                fam = (fam or p.stem).strip()
+                sty = (sty or 'Regular').strip()
+                families.setdefault(fam, {})
+                if sty not in families[fam]:   # first file wins
+                    families[fam][sty] = str(p)
     return dict(sorted(families.items()))
 
 
@@ -2422,6 +2425,12 @@ def _load_pil_font(font_name: str, size: int):
     if candidate.exists():
         try:
             return ImageFont.truetype(str(candidate), size)
+        except Exception:
+            pass
+    candidate_user = _FONTS_DIR_USER / font_name
+    if candidate_user.exists():
+        try:
+            return ImageFont.truetype(str(candidate_user), size)
         except Exception:
             pass
     return ImageFont.load_default()
