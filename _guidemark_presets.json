@@ -1,0 +1,25 @@
+[
+  {
+    "name": "番号パネル_文字なし",
+    "num_range": "1-15",
+    "tile_w": 100.0,
+    "tile_h": 100.0,
+    "margin": 10.0,
+    "gap": 5.0,
+    "dpi": 300,
+    "paper": "A3ノビ  (483×329 mm)",
+    "orient": "landscape",
+    "monochrome": true,
+    "num_font_fam": "Futura Std",
+    "num_font_sty": "Medium",
+    "num_auto": false,
+    "num_fsize_pt": 120,
+    "num_fsize3_pt": 89,
+    "num_color": "#000000",
+    "num_pos_x": 50,
+    "num_pos_y": 54,
+    "cut_line_show": true,
+    "cut_line_pt": 0.2,
+    "template_path": "C:\\Users\\Charles\\Downloads\\Number_No_Text.jpg"
+  }
+]

@@ -5959,12 +5959,16 @@ class GuideMarkWizard(tk.Toplevel):
         cut_row.pack(fill="x", padx=14, pady=4)
         tk.Checkbutton(cut_row, text="Show", variable=self._cut_line_show,
                        bg=BG2, fg=FG, selectcolor=BG3,
-                       activebackground=BG2, font=FONT_SM).pack(side="left")
+                       activebackground=BG2, font=FONT_SM,
+                       command=lambda: self._schedule_layout_preview(100)
+                       ).pack(side="left")
         tk.Spinbox(cut_row, textvariable=self._cut_line_pt,
                    from_=0.1, to=5.0, increment=0.1, width=5,
                    bg=BG3, fg=FG, insertbackground=FG, relief="flat",
                    buttonbackground=BG3,
-                   format="%.1f").pack(side="left", padx=(8, 0))
+                   format="%.1f",
+                   command=lambda: self._schedule_layout_preview(100)
+                   ).pack(side="left", padx=(8, 0))
         tk.Label(cut_row, text="pt", bg=BG2, fg=FG2,
                  font=FONT_SM).pack(side="left", padx=2)
 
@@ -6477,14 +6481,23 @@ class GuideMarkWizard(tk.Toplevel):
 #  HOME SCREEN
 # =============================================================================
 class HomeScreen(tk.Tk):
+    _WIN_W = 600
+    _WIN_H = 880
+
     def __init__(self):
         super().__init__()
         self.title("Image Tool")
         self.configure(bg=BG)
-        self.geometry("600x780")
         self.resizable(False, False)
         self._apply_style()
         self._build()
+        # ── Centre on screen ──────────────────────────────────────────────
+        self.update_idletasks()
+        sw = self.winfo_screenwidth()
+        sh = self.winfo_screenheight()
+        x  = (sw - self._WIN_W) // 2
+        y  = max(0, (sh - self._WIN_H) // 2)
+        self.geometry(f"{self._WIN_W}x{self._WIN_H}+{x}+{y}")
 
     def _apply_style(self):
         style = ttk.Style(self)
@@ -6538,7 +6551,29 @@ class HomeScreen(tk.Tk):
         label(sec, _t("home.tools"), fg=FG2, font=("Segoe UI", 8, "bold")).pack(side="left")
         tk.Frame(sec, bg=BG3, height=1).pack(side="left", fill="x", expand=True, padx=(10, 0))
 
-        # ── Tool cards ────────────────────────────────────────────────────────
+        # ── Tool cards in a scrollable area ───────────────────────────────────
+        tools_outer = tk.Frame(self, bg=BG)
+        tools_outer.pack(fill="both", expand=True, padx=28)
+
+        tools_cv = tk.Canvas(tools_outer, bg=BG, highlightthickness=0)
+        tools_sb = tk.Scrollbar(tools_outer, orient="vertical",
+                                command=tools_cv.yview)
+        tools_cv.configure(yscrollcommand=tools_sb.set)
+        # Only show scrollbar when needed
+        tools_cv.pack(side="left", fill="both", expand=True)
+
+        self._tools_inner = tk.Frame(tools_cv, bg=BG)
+        _tw = tools_cv.create_window((0, 0), window=self._tools_inner,
+                                     anchor="nw")
+        self._tools_inner.bind("<Configure>", lambda e: (
+            tools_cv.configure(scrollregion=tools_cv.bbox("all")),
+            tools_cv.itemconfig(_tw, width=tools_cv.winfo_width())))
+        tools_cv.bind("<Configure>",
+                      lambda e: tools_cv.itemconfig(_tw, width=e.width))
+        tools_cv.bind("<MouseWheel>",
+                      lambda e: tools_cv.yview_scroll(
+                          -1 if e.delta > 0 else 1, "units"))
+
         tools = [
             ("✏",  "Rename",      _t("home.rename_d"),     RenameWizard,      "#4cc9f0"),
             ("⤡",  "Resize",      _t("home.resize_d"),     ResizeWizard,      "#4895ef"),
@@ -6552,13 +6587,14 @@ class HomeScreen(tk.Tk):
             self._tool_card(ico, title, desc, cls, color)
 
         # ── Pipeline ──────────────────────────────────────────────────────────
-        sep2 = styled_frame(self)
-        sep2.pack(fill="x", padx=28, pady=(18, 12))
+        sep2 = styled_frame(self._tools_inner)
+        sep2.pack(fill="x", pady=(18, 12))
         label(sep2, _t("home.adv"), fg=FG2, font=("Segoe UI", 8, "bold")).pack(side="left")
-        tk.Frame(sep2, bg=BG3, height=1).pack(side="left", fill="x", expand=True, padx=(10, 0))
+        tk.Frame(sep2, bg=BG3, height=1).pack(side="left", fill="x",
+                                              expand=True, padx=(10, 0))
 
-        pipe_frm = styled_frame(self)
-        pipe_frm.pack(fill="x", padx=28)
+        pipe_frm = styled_frame(self._tools_inner)
+        pipe_frm.pack(fill="x", pady=(0, 16))
         btn(pipe_frm, _t("home.pipeline"), lambda: PipelineWizard(self),
             primary=False).pack(side="left")
         label(pipe_frm, _t("home.pipe_desc"),
@@ -6573,8 +6609,8 @@ class HomeScreen(tk.Tk):
         self._build()
 
     def _tool_card(self, ico, title, desc, cls, accent_col):
-        outer = tk.Frame(self, bg=BG2, cursor="hand2")
-        outer.pack(fill="x", padx=28, pady=4)
+        outer = tk.Frame(self._tools_inner, bg=BG2, cursor="hand2")
+        outer.pack(fill="x", pady=4)
 
         # Coloured left stripe
         stripe = tk.Frame(outer, bg=accent_col, width=4)
