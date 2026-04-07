@@ -5274,7 +5274,8 @@ class GuideMarkWizard(tk.Toplevel):
         self._num_font_fam  = tk.StringVar(value="Futura Std")
         self._num_font_sty  = tk.StringVar(value="Medium")
         self._num_auto      = tk.BooleanVar(value=True)
-        self._num_fsize_pt  = tk.IntVar(value=120)
+        self._num_fsize_pt  = tk.IntVar(value=120)   # 1-2 digit manual pt
+        self._num_fsize3_pt = tk.IntVar(value=90)    # 3+ digit manual/auto cap pt
         self._num_color     = tk.StringVar(value="#000000")
         self._num_pos_x     = tk.IntVar(value=50)   # % of tile width
         self._num_pos_y     = tk.IntVar(value=42)   # % of tile height
@@ -5306,7 +5307,7 @@ class GuideMarkWizard(tk.Toplevel):
 
         for v in (self._monochrome,
                   self._num_font_fam, self._num_font_sty, self._num_auto,
-                  self._num_fsize_pt, self._num_color,
+                  self._num_fsize_pt, self._num_fsize3_pt, self._num_color,
                   self._num_pos_x, self._num_pos_y,
                   self._tile_w, self._tile_h, self._preview_num):
             v.trace_add("write", lambda *_: self._schedule_tile_preview())
@@ -5387,6 +5388,7 @@ class GuideMarkWizard(tk.Toplevel):
             "num_font_sty":  self._num_font_sty.get(),
             "num_auto":      self._num_auto.get(),
             "num_fsize_pt":  self._num_fsize_pt.get(),
+            "num_fsize3_pt": self._num_fsize3_pt.get(),
             "num_color":     self._num_color.get(),
             "num_pos_x":     self._num_pos_x.get(),
             "num_pos_y":     self._num_pos_y.get(),
@@ -5410,6 +5412,7 @@ class GuideMarkWizard(tk.Toplevel):
         _s(self._num_font_sty,  "num_font_sty")
         _s(self._num_auto,      "num_auto")
         _s(self._num_fsize_pt,  "num_fsize_pt")
+        _s(self._num_fsize3_pt, "num_fsize3_pt")
         _s(self._num_color,     "num_color")
         _s(self._num_pos_x,     "num_pos_x")
         _s(self._num_pos_y,     "num_pos_y")
@@ -5767,9 +5770,19 @@ class GuideMarkWizard(tk.Toplevel):
                 width=6, bg=BG3, fg=FG, insertbackground=FG,
                 relief="flat", buttonbackground=BG3, state="disabled")
             self._num_fsize_spin.pack(side="left")
-            tk.Label(p, text="pt", bg=BG2, fg=FG2,
+            tk.Label(p, text="pt  (1-2 digit)", bg=BG2, fg=FG2,
                      font=FONT_SM).pack(side="left", padx=2)
         row(_t("gmw.num_fsize"), _nfsize)
+
+        def _nfsize3(p):
+            self._num_fsize3_spin = tk.Spinbox(
+                p, textvariable=self._num_fsize3_pt, from_=4, to=999,
+                width=6, bg=BG3, fg=FG, insertbackground=FG,
+                relief="flat", buttonbackground=BG3, state="disabled")
+            self._num_fsize3_spin.pack(side="left")
+            tk.Label(p, text="pt  (3+ digit)", bg=BG2, fg=FG2,
+                     font=FONT_SM).pack(side="left", padx=2)
+        row("  3-digit size", _nfsize3)
 
         def _ncol(p):
             entry(p, self._num_color, 9)
@@ -6109,8 +6122,11 @@ class GuideMarkWizard(tk.Toplevel):
     # ═════════════════════════════════════════════════════════════════════
     def _toggle_num_spin(self):
         if hasattr(self, "_num_fsize_spin"):
-            self._num_fsize_spin.configure(
-                state="disabled" if self._num_auto.get() else "normal")
+            st = "disabled" if self._num_auto.get() else "normal"
+            self._num_fsize_spin.configure(state=st)
+        if hasattr(self, "_num_fsize3_spin"):
+            st = "disabled" if self._num_auto.get() else "normal"
+            self._num_fsize3_spin.configure(state=st)
         self._schedule_tile_preview()
 
     def _toggle_adv(self):
@@ -6169,10 +6185,13 @@ class GuideMarkWizard(tk.Toplevel):
 
     def _auto_num_size(self, text: str, tw: int, th: int,
                        fp: str, dpi: int) -> int:
-        """Binary-search: largest pt where `text` fits in ~70% of tile W/H."""
+        """Binary-search: largest pt where `text` fits in ~70% W / 50% H."""
         from PIL import ImageDraw as _D, ImageFont as _F, Image as _I
         max_w = int(tw * 0.72)
         max_h = int(th * 0.50)
+        # for 3+ digit numbers, honour the manual cap as an upper bound
+        cap = (self._num_fsize3_pt.get()
+               if len(text) >= 3 else 400)
         dummy = _D.Draw(_I.new("RGB", (1, 1)))
 
         def fits(pt: int) -> bool:
@@ -6184,7 +6203,7 @@ class GuideMarkWizard(tk.Toplevel):
             bb = dummy.textbbox((0, 0), text, font=f)
             return (bb[2] - bb[0]) <= max_w and (bb[3] - bb[1]) <= max_h
 
-        lo, hi, best = 4, 220, 8
+        lo, hi, best = 4, cap, 8
         while lo <= hi:
             mid = (lo + hi) // 2
             if fits(mid):
@@ -6215,7 +6234,8 @@ class GuideMarkWizard(tk.Toplevel):
         if self._num_auto.get():
             num_pt = self._auto_num_size(s, tw, th, fp, dpi)
         else:
-            num_pt = self._num_fsize_pt.get()
+            num_pt = (self._num_fsize3_pt.get()
+                      if len(s) >= 3 else self._num_fsize_pt.get())
 
         px = self._pt2px(num_pt, dpi)
         try:
@@ -6341,6 +6361,12 @@ class GuideMarkWizard(tk.Toplevel):
         self._last_cols   = cols
         self._last_rows   = rows
 
+        # Centre the tile grid on the page
+        grid_w = cols * tw + (cols - 1) * gap
+        grid_h = rows * th + (rows - 1) * gap
+        off_x  = (PW - grid_w) // 2
+        off_y  = (PH - grid_h) // 2
+
         cut_lw = 0
         if self._cut_line_show.get():
             cut_lw = max(1, round(self._cut_line_pt.get() * dpi / 72))
@@ -6353,8 +6379,8 @@ class GuideMarkWizard(tk.Toplevel):
             for i, n in enumerate(chunk):
                 r  = i // cols
                 c  = i  % cols
-                x0 = margin + c * (tw + gap)
-                y0 = margin + r * (th + gap)
+                x0 = off_x + c * (tw + gap)
+                y0 = off_y + r * (th + gap)
                 sheet.paste(self._render_tile(n, tw, th, dpi), (x0, y0))
                 if cut_lw:
                     draw.rectangle(
