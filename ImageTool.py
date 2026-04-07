@@ -5308,6 +5308,7 @@ class GuideMarkWizard(tk.Toplevel):
         self._num_color     = tk.StringVar(value="#000000")
         self._num_pos_x     = tk.IntVar(value=50)   # % of tile width
         self._num_pos_y     = tk.IntVar(value=42)   # % of tile height
+        self._num_tracking  = tk.IntVar(value=0)    # letter spacing in px
         self._num_lock      = tk.BooleanVar(value=False)  # lock ratio on tile resize
         self._tile_w_prev   = 100.0   # previous tile_w for lock scaling
         self._tile_h_prev   = 100.0   # previous tile_h for lock scaling
@@ -5317,6 +5318,8 @@ class GuideMarkWizard(tk.Toplevel):
         self._pos_y_pct_str = tk.StringVar(value="42%")
         self._pos_x_px_str  = tk.StringVar(value="")
         self._pos_y_px_str  = tk.StringVar(value="")
+        self._pos_x_mm_str  = tk.StringVar(value="")
+        self._pos_y_mm_str  = tk.StringVar(value="")
         self._tile_px_str   = tk.StringVar(value="")
 
         self._sched_tile_id   = None
@@ -5362,6 +5365,10 @@ class GuideMarkWizard(tk.Toplevel):
                 f"≈ {round(self._num_pos_x.get() / 100 * tw_px)} px")
             self._pos_y_px_str.set(
                 f"≈ {round(self._num_pos_y.get() / 100 * th_px)} px")
+            self._pos_x_mm_str.set(
+                f"= {self._num_pos_x.get() / 100 * self._tile_w.get():.1f} mm")
+            self._pos_y_mm_str.set(
+                f"= {self._num_pos_y.get() / 100 * self._tile_h.get():.1f} mm")
         for v in (self._tile_w, self._tile_h, self._dpi,
                   self._num_pos_x, self._num_pos_y):
             v.trace_add("write", _upd_px_displays)
@@ -5450,6 +5457,7 @@ class GuideMarkWizard(tk.Toplevel):
             "num_color":     self._num_color.get(),
             "num_pos_x":     self._num_pos_x.get(),
             "num_pos_y":     self._num_pos_y.get(),
+            "num_tracking":  self._num_tracking.get(),
             "cut_line_show": self._cut_line_show.get(),
             "cut_line_pt":   self._cut_line_pt.get(),
             "template_path": self._selected_tpl.get("path", ""),
@@ -5476,6 +5484,7 @@ class GuideMarkWizard(tk.Toplevel):
         _s(self._num_color,     "num_color")
         _s(self._num_pos_x,     "num_pos_x")
         _s(self._num_pos_y,     "num_pos_y")
+        _s(self._num_tracking,  "num_tracking")
         _s(self._cut_line_show, "cut_line_show")
         _s(self._cut_line_pt,   "cut_line_pt")
         tp = d.get("template_path", "")
@@ -5918,6 +5927,17 @@ class GuideMarkWizard(tk.Toplevel):
             swatch(p, self._num_color)
         row(_t("gmw.num_color"), _ncol)
 
+        def _ntrack(p):
+            sp = tk.Spinbox(p, textvariable=self._num_tracking, from_=-200, to=200,
+                            increment=1, width=6, bg=BG3, fg=FG,
+                            insertbackground=FG, relief="flat",
+                            buttonbackground=BG3)
+            sp.pack(side="left")
+            _arrow_scale(sp)
+            tk.Label(p, text="px", bg=BG2, fg=FG2,
+                     font=FONT_SM).pack(side="left", padx=(2, 0))
+        row(_t("gmw.sub_tracking"), _ntrack)
+
         # ── Card size ──────────────────────────────────────────────────
         sec("━  Card size")
         def _tsize(p):
@@ -5939,40 +5959,48 @@ class GuideMarkWizard(tk.Toplevel):
                        variable=self._num_lock, bg=BG2, fg=FG2,
                        selectcolor=BG3, activebackground=BG2,
                        font=("Segoe UI", 7)).pack(side="left")
-        def _pos_row(p, pct_var, pct_str, px_str, mm_dim_var):
+        def _pos_row(p, pct_var, pct_str, mm_str, mm_dim_var):
             sc = tk.Scale(p, variable=pct_var, from_=0, to=100,
                           orient="horizontal", bg=BG2, fg=FG, troughcolor=BG3,
-                          highlightthickness=0, showvalue=False, length=100)
+                          highlightthickness=0, showvalue=False, length=90)
             sc.pack(side="left")
             _arrow_scale(sc)
             tk.Label(p, textvariable=pct_str, bg=BG2, fg=FG2,
                      font=FONT_SM, width=4, anchor="w").pack(
                          side="left", padx=(4, 0))
-            tk.Label(p, textvariable=px_str, bg=BG2, fg=FG2,
-                     font=("Segoe UI", 7), width=8, anchor="w").pack(
-                         side="left", padx=(6, 2))
-            px_ent = tk.Entry(p, bg=BG3, fg=FG, insertbackground=FG,
-                              relief="flat", width=5, justify="right")
-            px_ent.pack(side="left")
-            tk.Label(p, text="px", bg=BG2, fg=FG2,
+            # mm entry (editable)
+            mm_ent = tk.Entry(p, bg=BG3, fg=FG, insertbackground=FG,
+                              relief="flat", width=6, justify="right")
+            mm_ent.pack(side="left", padx=(6, 0))
+            tk.Label(p, text="mm", bg=BG2, fg=FG2,
                      font=FONT_SM).pack(side="left", padx=(2, 0))
-            def _apply(e=None, _v=pct_var, _e=px_ent, _d=mm_dim_var):
+            # keep entry in sync when slider moves
+            def _sync_entry(*_, _e=mm_ent, _v=pct_var, _d=mm_dim_var):
+                val = round(_v.get() / 100 * _d.get(), 1)
+                if not _e.focus_get() == _e:
+                    _e.delete(0, "end")
+                    _e.insert(0, str(val))
+            pct_var.trace_add("write", _sync_entry)
+            mm_dim_var.trace_add("write", _sync_entry)
+            _sync_entry()
+            # apply mm entry on Return / FocusOut
+            def _apply(e=None, _v=pct_var, _e=mm_ent, _d=mm_dim_var):
                 try:
-                    pv = int(_e.get())
-                    dpi = max(1, self._dpi.get())
-                    tile_px = max(1, round(_d.get() / 25.4 * dpi))
-                    _v.set(max(0, min(100, round(pv / tile_px * 100))))
+                    mm_val = float(_e.get())
+                    dim = _d.get()
+                    if dim > 0:
+                        _v.set(max(0, min(100, round(mm_val / dim * 100))))
                 except ValueError:
                     pass
-            px_ent.bind("<Return>",   _apply)
-            px_ent.bind("<FocusOut>", _apply)
+            mm_ent.bind("<Return>",   _apply)
+            mm_ent.bind("<FocusOut>", _apply)
 
         row("Position X",
             lambda p: _pos_row(p, self._num_pos_x, self._pos_x_pct_str,
-                               self._pos_x_px_str, self._tile_w))
+                               self._pos_x_mm_str, self._tile_w))
         row("Position Y",
             lambda p: _pos_row(p, self._num_pos_y, self._pos_y_pct_str,
-                               self._pos_y_px_str, self._tile_h))
+                               self._pos_y_mm_str, self._tile_h))
 
         # ── Output options ─────────────────────────────────────────────
         sec("━  Output")
@@ -6455,10 +6483,17 @@ class GuideMarkWizard(tk.Toplevel):
         col = self._num_color.get() or "#000000"
         cx  = int(tw * self._num_pos_x.get() / 100)
         cy  = int(th * self._num_pos_y.get() / 100)
-        bb  = draw.textbbox((0, 0), s, font=nf)
-        nx  = cx - (bb[2] - bb[0]) // 2 - bb[0]
-        ny  = cy - (bb[3] - bb[1]) // 2 - bb[1]
-        draw.text((nx, ny), s, font=nf, fill=col)
+        tracking = self._num_tracking.get()
+        if tracking != 0:
+            from PIL import ImageDraw as _D2
+            _draw_tracked(draw, s, nf, cx, cy,
+                          tuple(int(col.lstrip("#")[i:i+2], 16) for i in (0, 2, 4)) + (255,),
+                          tracking)
+        else:
+            bb  = draw.textbbox((0, 0), s, font=nf)
+            nx  = cx - (bb[2] - bb[0]) // 2 - bb[0]
+            ny  = cy - (bb[3] - bb[1]) // 2 - bb[1]
+            draw.text((nx, ny), s, font=nf, fill=col)
         return tile
 
     # ═════════════════════════════════════════════════════════════════════
