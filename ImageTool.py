@@ -5353,7 +5353,7 @@ class GuideMarkWizard(tk.Toplevel):
         self._num_pos_x     = tk.IntVar(value=50)   # % of tile width
         self._num_pos_y     = tk.IntVar(value=42)   # % of tile height
         self._num_tracking  = tk.IntVar(value=0)    # letter spacing in px
-        self._num_kern_mode = tk.StringVar(value="metrics")  # metrics / fixed
+        self._num_kern_mode = tk.StringVar(value="メトリクス")  # メトリクス / オプティカル / 等幅
         self._num_lock      = tk.BooleanVar(value=False)  # lock ratio on tile resize
         self._tile_w_prev   = 100.0   # previous tile_w for lock scaling
         self._tile_h_prev   = 100.0   # previous tile_h for lock scaling
@@ -5976,23 +5976,22 @@ class GuideMarkWizard(tk.Toplevel):
             swatch(p, self._num_color)
         row(_t("gmw.num_color"), _ncol)
 
+        def _nkern(p):
+            cb = ttk.Combobox(p, textvariable=self._num_kern_mode,
+                              values=["メトリクス", "オプティカル", "等幅"],
+                              state="readonly", width=16,
+                              style="Custom.TCombobox", font=FONT_SM)
+            cb.pack(side="left")
+        row("ケカニング :", _nkern)
+
         def _ntrack(p):
-            # Kerning mode radios
-            for lbl, key in [("Proportionnel", "metrics"),
-                             ("オプティカル", "optical"),
-                             ("Fixe (等幅)", "fixed")]:
-                tk.Radiobutton(
-                    p, text=lbl, value=key, variable=self._num_kern_mode,
-                    bg=BG2, fg=FG2, selectcolor=BG3, activebackground=BG2,
-                    font=("Segoe UI", 7)).pack(side="left", padx=(0, 4))
-            # Tracking amount
             sp = tk.Spinbox(p, textvariable=self._num_tracking, from_=-200, to=200,
-                            increment=1, width=5, bg=BG3, fg=FG,
+                            increment=1, width=7, bg=BG3, fg=FG,
                             insertbackground=FG, relief="flat",
                             buttonbackground=BG3)
-            sp.pack(side="left", padx=(6, 0))
+            sp.pack(side="left")
             tk.Label(p, text="px", bg=BG2, fg=FG2,
-                     font=FONT_SM).pack(side="left", padx=(2, 0))
+                     font=FONT_SM).pack(side="left", padx=(4, 0))
         row(_t("gmw.sub_tracking"), _ntrack)
 
         # ── Card size ──────────────────────────────────────────────────
@@ -6544,7 +6543,7 @@ class GuideMarkWizard(tk.Toplevel):
         tracking  = self._num_tracking.get()
         kern_mode = self._num_kern_mode.get()
 
-        if kern_mode == "fixed":
+        if kern_mode == "等幅":
             # 等幅: all characters spaced at a fixed slot width
             try:
                 slot_w = int(max(nf.getlength(ch) for ch in "0123456789"))
@@ -6562,7 +6561,7 @@ class GuideMarkWizard(tk.Toplevel):
                 draw.text((x + (slot_w - ch_w) // 2, cy), ch,
                           fill=col_rgba, font=nf, anchor="lm")
                 x += slot_w
-        elif kern_mode == "optical":
+        elif kern_mode == "オプティカル":
             _draw_optical(draw, s, nf, cx, cy, col_rgba, tracking)
         elif tracking != 0:
             _draw_tracked(draw, s, nf, cx, cy, col_rgba, tracking)
