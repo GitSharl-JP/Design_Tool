@@ -5301,6 +5301,7 @@ class GuideMarkWizard(tk.Toplevel):
         self._monochrome    = tk.BooleanVar(value=True)
         self._num_font_fam  = tk.StringVar(value="Futura Std")
         self._num_font_sty  = tk.StringVar(value="Medium")
+        self._num_font_display = tk.StringVar(value="Futura Std Medium")
         self._num_auto      = tk.BooleanVar(value=True)
         self._num_fsize_pt  = tk.IntVar(value=120)   # 1-2 digit manual pt
         self._num_fsize3_pt = tk.IntVar(value=90)    # 3+ digit manual/auto cap pt
@@ -5486,6 +5487,7 @@ class GuideMarkWizard(tk.Toplevel):
         self._refresh_cards()
         self._update_step1_template_display()
         self._toggle_num_spin()
+        self._update_font_display()
 
     def _save_preset_as(self):
         name = self._preset_name.get().strip()
@@ -5855,12 +5857,11 @@ class GuideMarkWizard(tk.Toplevel):
         sec("━  Number")
 
         def _nfont(p):
-            tk.Entry(p, textvariable=self._num_font_fam, bg=BG3, fg=FG,
-                     insertbackground=FG, relief="flat",
-                     width=13).pack(side="left", fill="x", expand=True)
-            tk.Entry(p, textvariable=self._num_font_sty, bg=BG3, fg=FG,
-                     insertbackground=FG, relief="flat",
-                     width=7).pack(side="left", padx=(4, 0))
+            tk.Label(p, textvariable=self._num_font_display, bg=BG3, fg=FG,
+                     font=FONT_SM, anchor="w", width=22, relief="flat",
+                     padx=4).pack(side="left", fill="x", expand=True)
+            btn(p, "Font…", self._open_gmw_font,
+                primary=False).pack(side="left", padx=(4, 0))
         row(_t("gmw.num_font"), _nfont)
 
         def _nauto(p):
@@ -6331,6 +6332,36 @@ class GuideMarkWizard(tk.Toplevel):
     # ═════════════════════════════════════════════════════════════════════
     # Font helpers
     # ═════════════════════════════════════════════════════════════════════
+    def _open_gmw_font(self):
+        """Open the FontPreviewDialog and apply the selected font."""
+        dlg = FontPreviewDialog(self, current_font=self._num_font_fam.get())
+        self.wait_window(dlg)
+        if not dlg.result:
+            return
+        flat = dlg.result
+        fams = _get_font_families()
+        found = False
+        for fam, styles in fams.items():
+            for sty in styles:
+                key = fam if sty in ('Regular', '') else f"{fam} {sty}"
+                if key == flat:
+                    self._num_font_fam.set(fam)
+                    self._num_font_sty.set(sty)
+                    found = True
+                    break
+            if found:
+                break
+        if not found and flat in fams:
+            self._num_font_fam.set(flat)
+            self._num_font_sty.set("Regular")
+        self._update_font_display()
+
+    def _update_font_display(self):
+        fam = self._num_font_fam.get()
+        sty = self._num_font_sty.get()
+        display = fam if sty in ('Regular', '') else f"{fam} {sty}"
+        self._num_font_display.set(display)
+
     def _font_path(self, family: str, style: str) -> str:
         _get_font_families()
         key = f"{family} {style}".strip()
