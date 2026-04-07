@@ -5307,6 +5307,9 @@ class GuideMarkWizard(tk.Toplevel):
         self._num_color     = tk.StringVar(value="#000000")
         self._num_pos_x     = tk.IntVar(value=50)   # % of tile width
         self._num_pos_y     = tk.IntVar(value=42)   # % of tile height
+        self._num_lock      = tk.BooleanVar(value=False)  # lock ratio on tile resize
+        self._tile_w_prev   = 100.0   # previous tile_w for lock scaling
+        self._tile_h_prev   = 100.0   # previous tile_h for lock scaling
         self._preview_num   = tk.IntVar(value=1)
         # ── Display helpers (driven by traces after _build) ────────────────
         self._pos_x_pct_str = tk.StringVar(value="50%")
@@ -5362,6 +5365,32 @@ class GuideMarkWizard(tk.Toplevel):
                   self._num_pos_x, self._num_pos_y):
             v.trace_add("write", _upd_px_displays)
         _upd_px_displays()
+
+        def _on_tile_size_change(*_):
+            """When lock is on, scale font sizes proportionally to tile area."""
+            if not self._num_lock.get():
+                self._tile_w_prev = self._tile_w.get()
+                self._tile_h_prev = self._tile_h.get()
+                return
+            new_w = self._tile_w.get()
+            new_h = self._tile_h.get()
+            prev_w = self._tile_w_prev
+            prev_h = self._tile_h_prev
+            if prev_w <= 0 or prev_h <= 0:
+                self._tile_w_prev = new_w
+                self._tile_h_prev = new_h
+                return
+            # Scale by the geometric mean of the two dimension ratios
+            ratio = ((new_w / prev_w) * (new_h / prev_h)) ** 0.5
+            if abs(ratio - 1.0) > 0.001:
+                self._num_fsize_pt.set(
+                    max(4, round(self._num_fsize_pt.get() * ratio)))
+                self._num_fsize3_pt.set(
+                    max(4, round(self._num_fsize3_pt.get() * ratio)))
+            self._tile_w_prev = new_w
+            self._tile_h_prev = new_h
+        self._tile_w.trace_add("write", _on_tile_size_change)
+        self._tile_h.trace_add("write", _on_tile_size_change)
 
     # ═════════════════════════════════════════════════════════════════════
     # Template persistence
@@ -5867,7 +5896,27 @@ class GuideMarkWizard(tk.Toplevel):
             swatch(p, self._num_color)
         row(_t("gmw.num_color"), _ncol)
 
-        # ── Number position (slider + % label + ≈px display + direct px entry)
+        # ── Card size ──────────────────────────────────────────────────
+        sec("━  Card size")
+        def _tsize(p):
+            spin(p, self._tile_w, 1, 500, inc=0.5, w=7, fmt="%.1f")
+            tk.Label(p, text="×", bg=BG2, fg=FG2,
+                     font=FONT_SM).pack(side="left", padx=4)
+            spin(p, self._tile_h, 1, 500, inc=0.5, w=7, fmt="%.1f")
+            tk.Label(p, text="mm", bg=BG2, fg=FG2,
+                     font=FONT_SM).pack(side="left", padx=2)
+            tk.Label(p, textvariable=self._tile_px_str, bg=BG2, fg=FG2,
+                     font=("Segoe UI", 7)).pack(side="left", padx=(8, 0))
+        row(_t("gmw.tile_size"), _tsize)
+
+        # ── Number position  ───────────────────────────────────────────
+        # Lock checkbox: when on, font sizes scale proportionally on resize
+        lock_row = tk.Frame(lp, bg=BG2)
+        lock_row.pack(fill="x", padx=16, pady=(2, 0))
+        tk.Checkbutton(lock_row, text="🔒  Lock number size & position ratio",
+                       variable=self._num_lock, bg=BG2, fg=FG2,
+                       selectcolor=BG3, activebackground=BG2,
+                       font=("Segoe UI", 7)).pack(side="left")
         def _pos_row(p, pct_var, pct_str, px_str, mm_dim_var):
             sc = tk.Scale(p, variable=pct_var, from_=0, to=100,
                           orient="horizontal", bg=BG2, fg=FG, troughcolor=BG3,
@@ -5932,16 +5981,6 @@ class GuideMarkWizard(tk.Toplevel):
                                                     padx=(0, 7))
             fn(r)
 
-        def _tsize(p):
-            spin(p, self._tile_w, 1, 500, inc=0.5, w=7, fmt="%.1f")
-            tk.Label(p, text="×", bg=BG2, fg=FG2,
-                     font=FONT_SM).pack(side="left", padx=4)
-            spin(p, self._tile_h, 1, 500, inc=0.5, w=7, fmt="%.1f")
-            tk.Label(p, text="mm", bg=BG2, fg=FG2,
-                     font=FONT_SM).pack(side="left", padx=2)
-            tk.Label(p, textvariable=self._tile_px_str, bg=BG2, fg=FG2,
-                     font=("Segoe UI", 7)).pack(side="left", padx=(10, 0))
-        adv_row(_t("gmw.tile_size"), _tsize)
         adv_row(_t("gmw.dpi"),
                 lambda p: spin(p, self._dpi, 72, 600, w=6))
 
