@@ -6482,7 +6482,7 @@ class GuideMarkWizard(tk.Toplevel):
 # =============================================================================
 class HomeScreen(tk.Tk):
     _WIN_W = 600
-    _WIN_H = 880
+    _WIN_H = 800
 
     def __init__(self):
         super().__init__()
@@ -6559,8 +6559,17 @@ class HomeScreen(tk.Tk):
         tools_sb = tk.Scrollbar(tools_outer, orient="vertical",
                                 command=tools_cv.yview)
         tools_cv.configure(yscrollcommand=tools_sb.set)
-        # Only show scrollbar when needed
         tools_cv.pack(side="left", fill="both", expand=True)
+        # scrollbar only shows when content overflows; always bind wheel
+        self._tools_cv = tools_cv
+
+        def _scroll(e):
+            tools_cv.yview_scroll(-1 if e.delta > 0 else 1, "units")
+
+        def _bind_scroll(widget):
+            widget.bind("<MouseWheel>", _scroll)
+            for child in widget.winfo_children():
+                _bind_scroll(child)
 
         self._tools_inner = tk.Frame(tools_cv, bg=BG)
         _tw = tools_cv.create_window((0, 0), window=self._tools_inner,
@@ -6570,9 +6579,11 @@ class HomeScreen(tk.Tk):
             tools_cv.itemconfig(_tw, width=tools_cv.winfo_width())))
         tools_cv.bind("<Configure>",
                       lambda e: tools_cv.itemconfig(_tw, width=e.width))
-        tools_cv.bind("<MouseWheel>",
-                      lambda e: tools_cv.yview_scroll(
-                          -1 if e.delta > 0 else 1, "units"))
+        tools_cv.bind("<MouseWheel>", _scroll)
+        # Re-bind scroll on every inner layout change (new children added)
+        self._tools_inner.bind("<Configure>",
+                               lambda e: _bind_scroll(self._tools_inner),
+                               add="+")
 
         tools = [
             ("✏",  "Rename",      _t("home.rename_d"),     RenameWizard,      "#4cc9f0"),
