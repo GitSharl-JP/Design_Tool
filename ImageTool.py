@@ -5933,33 +5933,12 @@ class GuideMarkWizard(tk.Toplevel):
         row(_t("gmw.num_color"), _ncol)
 
         def _ntrack(p):
-            # Kerning mode OptionMenu
-            modes = [("メトリクス (Metrics)", "metrics"),
-                     ("等幅 (Fixed-width)", "fixed")]
-            mode_labels = [m[0] for m in modes]
-            om = tk.OptionMenu(p, self._num_kern_mode,
-                               *[m[1] for m in modes])
-            om.config(bg=BG3, fg=FG, activebackground=BG3, activeforeground=FG,
-                      relief="flat", font=("Segoe UI", 7), width=14,
-                      highlightthickness=0)
-            om["menu"].config(bg=BG3, fg=FG,
-                              activebackground=ACCENT, activeforeground="#fff")
-            # Show friendly labels while storing mode key
-            _mode_map = {m[1]: m[0] for m in modes}
-            _label_var = tk.StringVar(value=_mode_map.get(
-                self._num_kern_mode.get(), mode_labels[0]))
-            def _sync_label(*_):
-                _label_var.set(_mode_map.get(self._num_kern_mode.get(),
-                                             mode_labels[0]))
-            self._num_kern_mode.trace_add("write", _sync_label)
-            om["textvariable"] = _label_var
-            # Rebuild menu to use friendly labels but store mode keys
-            om["menu"].delete(0, "end")
-            for lbl, key in modes:
-                om["menu"].add_command(
-                    label=lbl,
-                    command=lambda k=key: self._num_kern_mode.set(k))
-            om.pack(side="left")
+            # Kerning mode radios
+            for lbl, key in [("Proportionnel", "metrics"), ("Fixe (等幅)", "fixed")]:
+                tk.Radiobutton(
+                    p, text=lbl, value=key, variable=self._num_kern_mode,
+                    bg=BG2, fg=FG2, selectcolor=BG3, activebackground=BG2,
+                    font=("Segoe UI", 7)).pack(side="left", padx=(0, 6))
             # Tracking amount
             sp = tk.Spinbox(p, textvariable=self._num_tracking, from_=-200, to=200,
                             increment=1, width=5, bg=BG3, fg=FG,
