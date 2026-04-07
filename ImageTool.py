@@ -5309,6 +5309,7 @@ class GuideMarkWizard(tk.Toplevel):
         self._num_pos_x     = tk.IntVar(value=50)   # % of tile width
         self._num_pos_y     = tk.IntVar(value=42)   # % of tile height
         self._num_tracking  = tk.IntVar(value=0)    # letter spacing in px
+        self._num_kern_mode = tk.StringVar(value="metrics")  # metrics / fixed
         self._num_lock      = tk.BooleanVar(value=False)  # lock ratio on tile resize
         self._tile_w_prev   = 100.0   # previous tile_w for lock scaling
         self._tile_h_prev   = 100.0   # previous tile_h for lock scaling
@@ -5343,12 +5344,14 @@ class GuideMarkWizard(tk.Toplevel):
         for v in (self._monochrome,
                   self._num_font_fam, self._num_font_sty, self._num_auto,
                   self._num_fsize_pt, self._num_fsize3_pt, self._num_color,
-                  self._num_pos_x, self._num_pos_y,
+                  self._num_pos_x, self._num_pos_y, self._num_tracking,
+                  self._num_kern_mode,
                   self._tile_w, self._tile_h, self._preview_num):
             v.trace_add("write", lambda *_: self._schedule_tile_preview())
 
         for v in (self._num_range_str, self._paper, self._orient,
                   self._margin, self._gap, self._dpi,
+                  self._num_tracking, self._num_kern_mode,
                   self._cut_line_show, self._cut_line_pt):
             v.trace_add("write", lambda *_: self._schedule_layout_preview())
 
@@ -5458,6 +5461,7 @@ class GuideMarkWizard(tk.Toplevel):
             "num_pos_x":     self._num_pos_x.get(),
             "num_pos_y":     self._num_pos_y.get(),
             "num_tracking":  self._num_tracking.get(),
+            "num_kern_mode": self._num_kern_mode.get(),
             "cut_line_show": self._cut_line_show.get(),
             "cut_line_pt":   self._cut_line_pt.get(),
             "template_path": self._selected_tpl.get("path", ""),
@@ -5485,6 +5489,7 @@ class GuideMarkWizard(tk.Toplevel):
         _s(self._num_pos_x,     "num_pos_x")
         _s(self._num_pos_y,     "num_pos_y")
         _s(self._num_tracking,  "num_tracking")
+        _s(self._num_kern_mode, "num_kern_mode")
         _s(self._cut_line_show, "cut_line_show")
         _s(self._cut_line_pt,   "cut_line_pt")
         tp = d.get("template_path", "")
@@ -5928,12 +5933,39 @@ class GuideMarkWizard(tk.Toplevel):
         row(_t("gmw.num_color"), _ncol)
 
         def _ntrack(p):
+            # Kerning mode OptionMenu
+            modes = [("メトリクス (Metrics)", "metrics"),
+                     ("等幅 (Fixed-width)", "fixed")]
+            mode_labels = [m[0] for m in modes]
+            om = tk.OptionMenu(p, self._num_kern_mode,
+                               *[m[1] for m in modes])
+            om.config(bg=BG3, fg=FG, activebackground=BG3, activeforeground=FG,
+                      relief="flat", font=("Segoe UI", 7), width=14,
+                      highlightthickness=0)
+            om["menu"].config(bg=BG3, fg=FG,
+                              activebackground=ACCENT, activeforeground="#fff")
+            # Show friendly labels while storing mode key
+            _mode_map = {m[1]: m[0] for m in modes}
+            _label_var = tk.StringVar(value=_mode_map.get(
+                self._num_kern_mode.get(), mode_labels[0]))
+            def _sync_label(*_):
+                _label_var.set(_mode_map.get(self._num_kern_mode.get(),
+                                             mode_labels[0]))
+            self._num_kern_mode.trace_add("write", _sync_label)
+            om["textvariable"] = _label_var
+            # Rebuild menu to use friendly labels but store mode keys
+            om["menu"].delete(0, "end")
+            for lbl, key in modes:
+                om["menu"].add_command(
+                    label=lbl,
+                    command=lambda k=key: self._num_kern_mode.set(k))
+            om.pack(side="left")
+            # Tracking amount
             sp = tk.Spinbox(p, textvariable=self._num_tracking, from_=-200, to=200,
-                            increment=1, width=6, bg=BG3, fg=FG,
+                            increment=1, width=5, bg=BG3, fg=FG,
                             insertbackground=FG, relief="flat",
                             buttonbackground=BG3)
-            sp.pack(side="left")
-            _arrow_scale(sp)
+            sp.pack(side="left", padx=(6, 0))
             tk.Label(p, text="px", bg=BG2, fg=FG2,
                      font=FONT_SM).pack(side="left", padx=(2, 0))
         row(_t("gmw.sub_tracking"), _ntrack)
@@ -6480,15 +6512,33 @@ class GuideMarkWizard(tk.Toplevel):
         except Exception:
             nf = _F.load_default()
 
-        col = self._num_color.get() or "#000000"
+        col      = self._num_color.get() or "#000000"
+        col_rgba = tuple(int(col.lstrip("#")[i:i+2], 16) for i in (0, 2, 4)) + (255,)
         cx  = int(tw * self._num_pos_x.get() / 100)
         cy  = int(th * self._num_pos_y.get() / 100)
-        tracking = self._num_tracking.get()
-        if tracking != 0:
-            from PIL import ImageDraw as _D2
-            _draw_tracked(draw, s, nf, cx, cy,
-                          tuple(int(col.lstrip("#")[i:i+2], 16) for i in (0, 2, 4)) + (255,),
-                          tracking)
+        tracking  = self._num_tracking.get()
+        kern_mode = self._num_kern_mode.get()
+
+        if kern_mode == "fixed":
+            # 等幅: all characters spaced at a fixed slot width
+            try:
+                slot_w = int(max(nf.getlength(ch) for ch in "0123456789"))
+            except AttributeError:
+                slot_w = int(max((draw.textbbox((0,0),ch,font=nf)[2]-draw.textbbox((0,0),ch,font=nf)[0]) for ch in "0123456789"))
+            slot_w = max(1, slot_w + tracking)
+            total_w = slot_w * len(s)
+            x = cx - total_w // 2
+            for ch in s:
+                try:
+                    ch_w = int(nf.getlength(ch))
+                except AttributeError:
+                    bb_ = draw.textbbox((0, 0), ch, font=nf)
+                    ch_w = bb_[2] - bb_[0]
+                draw.text((x + (slot_w - ch_w) // 2, cy), ch,
+                          fill=col_rgba, font=nf, anchor="lm")
+                x += slot_w
+        elif tracking != 0:
+            _draw_tracked(draw, s, nf, cx, cy, col_rgba, tracking)
         else:
             bb  = draw.textbbox((0, 0), s, font=nf)
             nx  = cx - (bb[2] - bb[0]) // 2 - bb[0]
@@ -6636,7 +6686,10 @@ class GuideMarkWizard(tk.Toplevel):
                 c  = i  % cols
                 x0 = off_x + c * (tw + gap)
                 y0 = off_y + r * (th + gap)
-                sheet.paste(self._render_tile(n, tw, th, dpi), (x0, y0))
+                try:
+                    sheet.paste(self._render_tile(n, tw, th, dpi), (x0, y0))
+                except Exception:
+                    pass
                 if cut_lw:
                     draw.rectangle(
                         [x0, y0, x0 + tw - 1, y0 + th - 1],
