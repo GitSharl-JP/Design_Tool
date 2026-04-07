@@ -6553,10 +6553,11 @@ class GuideMarkWizard(tk.Toplevel):
         if not pages:
             return
         base = os.path.splitext(self._export_name.get().strip() or "guidemark_layout")[0]
+        dpi_val = max(72, self._dpi.get())
         for i, sheet in enumerate(pages):
             suffix = f"_p{i + 1}" if len(pages) > 1 else ""
             out_path = os.path.join(out_dir, f"{base}{suffix}.png")
-            sheet.save(out_path, "PNG")
+            sheet.save(out_path, "PNG", dpi=(dpi_val, dpi_val))
         messagebox.showinfo(
             _t("gmw.title"),
             _t("gmw.done_png",
