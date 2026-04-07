@@ -738,6 +738,19 @@ def entry(parent, textvariable=None, width=30, **kw):
                     bg=BG3, fg=FG, insertbackground=FG,
                     relief="flat", font=FONT_BODY, bd=4, **kw)
 
+def _arrow_scale(sc: "tk.Scale"):
+    """Allow arrow-key control on any Scale: click it, then ←/→/↑/↓ steps ±1."""
+    sc.configure(takefocus=True)
+    def _step(n):
+        lo = float(sc.cget("from"))
+        hi = float(sc.cget("to"))
+        sc.set(max(lo, min(hi, sc.get() + n)))
+        return "break"
+    sc.bind("<Left>",  lambda e: _step(-1))
+    sc.bind("<Right>", lambda e: _step(+1))
+    sc.bind("<Up>",    lambda e: _step(+1))
+    sc.bind("<Down>",  lambda e: _step(-1))
+
 def separator(parent):
     return tk.Frame(parent, bg=BG3, height=1)
 
@@ -1508,6 +1521,7 @@ class CompressWizard(tk.Toplevel):
                       bg=BG, fg=FG, troughcolor=BG3,
                       highlightthickness=0, length=180)
         sc.pack(side="left", padx=8)
+        _arrow_scale(sc)
         self._q_lbl = label(r, "85", fg=FG_GREEN)
         self._q_lbl.pack(side="left")
         def _on_q(*_):
@@ -1524,10 +1538,12 @@ class CompressWizard(tk.Toplevel):
         r3 = styled_frame(self._ts_frame); r3.pack(fill="x", pady=4)
         label(r3, "Min quality floor:").pack(side="left")
         self._min_q_var = tk.IntVar(value=20)
-        tk.Scale(r3, from_=1, to=95, orient="horizontal",
+        _sc_minq = tk.Scale(r3, from_=1, to=95, orient="horizontal",
                  variable=self._min_q_var,
                  bg=BG, fg=FG, troughcolor=BG3,
-                 highlightthickness=0, length=160).pack(side="left", padx=8)
+                 highlightthickness=0, length=160)
+        _sc_minq.pack(side="left", padx=8)
+        _arrow_scale(_sc_minq)
 
         separator(left).pack(fill="x", pady=10)
         label(left, "PNG handling", font=FONT_H2).pack(anchor="w", pady=(0,4))
@@ -1894,6 +1910,7 @@ class ResizeWizard(tk.Toplevel):
                       bg=BG, fg=FG, troughcolor=BG3,
                       highlightthickness=0, length=180)
         sc.pack(side="left", padx=(0,8))
+        _arrow_scale(sc)
         ql = label(rq, "90", fg=FG_GREEN); ql.pack(side="left")
         def _on_rq(*_):
             ql.config(text=str(self._jpeg_q.get()))
@@ -2242,6 +2259,7 @@ class ColorPickerDialog(tk.Toplevel):
                           showvalue=True, resolution=1,
                           command=lambda v, _v=var: self._on_rgb_slide())
             sl.pack(side="left", padx=4)
+            _arrow_scale(sl)
             tk.Entry(row, textvariable=var, bg=BG3, fg=FG, insertbackground=FG,
                      relief="flat", font=FONT_BODY, width=4).pack(side="left")
 
@@ -3786,6 +3804,7 @@ class ImageGenWizard(tk.Toplevel):
                                        command=lambda v: self._shadow_ox.set(str(int(float(v)))))
         self._sh_ox_slider.set(4)
         self._sh_ox_slider.pack(side="left", padx=6)
+        _arrow_scale(self._sh_ox_slider)
         tk.Entry(sh_r2, textvariable=self._shadow_ox, bg=BG3, fg=FG,
                  insertbackground=FG, relief="flat", font=FONT_BODY, width=5
                  ).pack(side="left")
@@ -3796,6 +3815,7 @@ class ImageGenWizard(tk.Toplevel):
                                        command=lambda v: self._shadow_oy.set(str(int(float(v)))))
         self._sh_oy_slider.set(4)
         self._sh_oy_slider.pack(side="left", padx=6)
+        _arrow_scale(self._sh_oy_slider)
         tk.Entry(sh_r2, textvariable=self._shadow_oy, bg=BG3, fg=FG,
                  insertbackground=FG, relief="flat", font=FONT_BODY, width=5
                  ).pack(side="left")
@@ -3810,6 +3830,7 @@ class ImageGenWizard(tk.Toplevel):
                                          command=lambda v: self._shadow_blur.set(str(int(float(v)))))
         self._sh_blur_slider.set(3)
         self._sh_blur_slider.pack(side="left", padx=6)
+        _arrow_scale(self._sh_blur_slider)
         tk.Entry(sh_r3, textvariable=self._shadow_blur, bg=BG3, fg=FG,
                  insertbackground=FG, relief="flat", font=FONT_BODY, width=5
                  ).pack(side="left")
@@ -3869,6 +3890,7 @@ class ImageGenWizard(tk.Toplevel):
                                     command=_on_px_slider)
         self._px_slider.set(0)
         self._px_slider.pack(side="left", padx=6)
+        _arrow_scale(self._px_slider)
 
         # Entry: digits only; slider follows on Enter/FocusOut (no mid-typing clamping)
         def _pos_vcmd(new_val):
@@ -3909,6 +3931,7 @@ class ImageGenWizard(tk.Toplevel):
                                     command=_on_py_slider)
         self._py_slider.set(0)
         self._py_slider.pack(side="left", padx=6)
+        _arrow_scale(self._py_slider)
 
         py_entry = tk.Entry(pos_r, textvariable=self._pos_y,
                             validate="key", validatecommand=_py_vcmd,
@@ -3962,6 +3985,7 @@ class ImageGenWizard(tk.Toplevel):
                                       highlightthickness=0, troughcolor=BG3,
                                       activebackground=ACCENT, length=180)
         self._guide_slider.pack(side="left", padx=6)
+        _arrow_scale(self._guide_slider)
 
         # Entry: digits-only, clamps to [1..200] on Return / focus-out
         _gm_str = tk.StringVar(value=str(self._guide_margin.get()))
@@ -4059,6 +4083,7 @@ class ImageGenWizard(tk.Toplevel):
                                        command=lambda v: self._radius.set(str(int(float(v)))))
         self._radius_slider.set(40)
         self._radius_slider.pack(side="left", padx=8)
+        _arrow_scale(self._radius_slider)
         tk.Entry(self._radius_frm, textvariable=self._radius,
                  bg=BG3, fg=FG, insertbackground=FG, relief="flat",
                  font=FONT_BODY, width=5).pack(side="left", padx=4)
@@ -4102,10 +4127,11 @@ class ImageGenWizard(tk.Toplevel):
         self._qual_frm = styled_frame(p)
         self._qual_frm.pack(anchor="w", fill="x", padx=24, pady=(6, 0))
         label(self._qual_frm, _t("s4.quality")).pack(side="left")
-        tk.Scale(self._qual_frm, from_=60, to=100, variable=self._quality,
+        _sc_qual_cvw = tk.Scale(self._qual_frm, from_=60, to=100, variable=self._quality,
                  orient="horizontal", bg=BG2, fg=FG, highlightthickness=0,
-                 troughcolor=BG3, activebackground=ACCENT, length=200
-                 ).pack(side="left", padx=8)
+                 troughcolor=BG3, activebackground=ACCENT, length=200)
+        _sc_qual_cvw.pack(side="left", padx=8)
+        _arrow_scale(_sc_qual_cvw)
         label(self._qual_frm, "%", fg=FG2, font=FONT_SM).pack(side="left")
 
         separator(p).pack(fill="x", pady=12)
@@ -5091,10 +5117,11 @@ class ConvertWizard(tk.Toplevel):
         self._qual_row.pack(anchor="w", fill="x", pady=2)
         label(self._qual_row, _t("conv.quality")).pack(side="left")
         self._quality = tk.IntVar(value=92)
-        tk.Scale(self._qual_row, from_=60, to=100, variable=self._quality,
+        _sc_qual_conv = tk.Scale(self._qual_row, from_=60, to=100, variable=self._quality,
                  orient="horizontal", bg=BG2, fg=FG, highlightthickness=0,
-                 troughcolor=BG3, activebackground=ACCENT, length=180
-                 ).pack(side="left", padx=6)
+                 troughcolor=BG3, activebackground=ACCENT, length=180)
+        _sc_qual_conv.pack(side="left", padx=6)
+        _arrow_scale(_sc_qual_conv)
         label(self._qual_row, "%", fg=FG2, font=FONT_SM).pack(side="left")
         self._toggle_quality()
 
@@ -5797,6 +5824,7 @@ class GuideMarkWizard(tk.Toplevel):
                           orient="horizontal", bg=BG2, fg=FG, troughcolor=BG3,
                           highlightthickness=0, showvalue=False, length=100)
             sc.pack(side="left")
+            _arrow_scale(sc)
             tk.Label(p, textvariable=pct_str, bg=BG2, fg=FG2,
                      font=FONT_SM, width=4, anchor="w").pack(
                          side="left", padx=(4, 0))
