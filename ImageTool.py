@@ -5350,22 +5350,31 @@ class GuideMarkWizard(tk.Toplevel):
         self._num_fsize_pt  = tk.IntVar(value=120)   # 1-2 digit manual pt
         self._num_fsize3_pt = tk.IntVar(value=90)    # 3+ digit manual/auto cap pt
         self._num_color     = tk.StringVar(value="#000000")
-        self._num_pos_x     = tk.IntVar(value=50)   # % of tile width
-        self._num_pos_y     = tk.IntVar(value=42)   # % of tile height
-        self._num_tracking  = tk.IntVar(value=0)    # letter spacing in px
-        self._num_kern_mode = tk.StringVar(value="メトリクス")  # メトリクス / オプティカル / 等幅
+        self._num_pos_x     = tk.IntVar(value=50)   # % of tile width  (1-2 digit)
+        self._num_pos_y     = tk.IntVar(value=42)   # % of tile height (1-2 digit)
+        self._num_tracking  = tk.IntVar(value=0)    # letter spacing in px (1-2 digit)
+        self._num_kern_mode = tk.StringVar(value="メトリクス")  # メトリクス / オプティカル / 等幅 (1-2 digit)
+        # ── 3-digit-specific overrides ─────────────────────────────────────
+        self._num3_pos_x     = tk.IntVar(value=50)
+        self._num3_pos_y     = tk.IntVar(value=42)
+        self._num3_tracking  = tk.IntVar(value=0)
+        self._num3_kern_mode = tk.StringVar(value="メトリクス")
         self._num_lock      = tk.BooleanVar(value=False)  # lock ratio on tile resize
         self._tile_w_prev   = 100.0   # previous tile_w for lock scaling
         self._tile_h_prev   = 100.0   # previous tile_h for lock scaling
         self._preview_num   = tk.IntVar(value=1)
         # ── Display helpers (driven by traces after _build) ────────────────
-        self._pos_x_pct_str = tk.StringVar(value="50%")
-        self._pos_y_pct_str = tk.StringVar(value="42%")
-        self._pos_x_px_str  = tk.StringVar(value="")
-        self._pos_y_px_str  = tk.StringVar(value="")
-        self._pos_x_mm_str  = tk.StringVar(value="")
-        self._pos_y_mm_str  = tk.StringVar(value="")
-        self._tile_px_str   = tk.StringVar(value="")
+        self._pos_x_pct_str  = tk.StringVar(value="50%")
+        self._pos_y_pct_str  = tk.StringVar(value="42%")
+        self._pos_x_px_str   = tk.StringVar(value="")
+        self._pos_y_px_str   = tk.StringVar(value="")
+        self._pos_x_mm_str   = tk.StringVar(value="")
+        self._pos_y_mm_str   = tk.StringVar(value="")
+        self._pos3_x_pct_str = tk.StringVar(value="50%")
+        self._pos3_y_pct_str = tk.StringVar(value="42%")
+        self._pos3_x_mm_str  = tk.StringVar(value="")
+        self._pos3_y_mm_str  = tk.StringVar(value="")
+        self._tile_px_str    = tk.StringVar(value="")
 
         self._sched_tile_id   = None
         self._sched_layout_id = None
@@ -5390,12 +5399,15 @@ class GuideMarkWizard(tk.Toplevel):
                   self._num_fsize_pt, self._num_fsize3_pt, self._num_color,
                   self._num_pos_x, self._num_pos_y, self._num_tracking,
                   self._num_kern_mode,
+                  self._num3_pos_x, self._num3_pos_y, self._num3_tracking,
+                  self._num3_kern_mode,
                   self._tile_w, self._tile_h, self._preview_num):
             v.trace_add("write", lambda *_: self._schedule_tile_preview())
 
         for v in (self._num_range_str, self._paper, self._orient,
                   self._margin, self._gap, self._dpi,
                   self._num_tracking, self._num_kern_mode,
+                  self._num3_tracking, self._num3_kern_mode,
                   self._cut_line_show, self._cut_line_pt):
             v.trace_add("write", lambda *_: self._schedule_layout_preview())
 
@@ -5416,8 +5428,15 @@ class GuideMarkWizard(tk.Toplevel):
                 f"= {self._num_pos_x.get() / 100 * self._tile_w.get():.1f} mm")
             self._pos_y_mm_str.set(
                 f"= {self._num_pos_y.get() / 100 * self._tile_h.get():.1f} mm")
+            self._pos3_x_pct_str.set(f"{self._num3_pos_x.get()}%")
+            self._pos3_y_pct_str.set(f"{self._num3_pos_y.get()}%")
+            self._pos3_x_mm_str.set(
+                f"= {self._num3_pos_x.get() / 100 * self._tile_w.get():.1f} mm")
+            self._pos3_y_mm_str.set(
+                f"= {self._num3_pos_y.get() / 100 * self._tile_h.get():.1f} mm")
         for v in (self._tile_w, self._tile_h, self._dpi,
-                  self._num_pos_x, self._num_pos_y):
+                  self._num_pos_x, self._num_pos_y,
+                  self._num3_pos_x, self._num3_pos_y):
             v.trace_add("write", _upd_px_displays)
         _upd_px_displays()
 
@@ -5503,10 +5522,14 @@ class GuideMarkWizard(tk.Toplevel):
             "num_fsize3_pt": self._num_fsize3_pt.get(),
             "num_color":     self._num_color.get(),
             "num_pos_x":     self._num_pos_x.get(),
-            "num_pos_y":     self._num_pos_y.get(),
-            "num_tracking":  self._num_tracking.get(),
-            "num_kern_mode": self._num_kern_mode.get(),
-            "cut_line_show": self._cut_line_show.get(),
+            "num_pos_y":       self._num_pos_y.get(),
+            "num_tracking":    self._num_tracking.get(),
+            "num_kern_mode":   self._num_kern_mode.get(),
+            "num3_pos_x":      self._num3_pos_x.get(),
+            "num3_pos_y":      self._num3_pos_y.get(),
+            "num3_tracking":   self._num3_tracking.get(),
+            "num3_kern_mode":  self._num3_kern_mode.get(),
+            "cut_line_show":   self._cut_line_show.get(),
             "cut_line_pt":   self._cut_line_pt.get(),
             "template_path": self._selected_tpl.get("path", ""),
         }
@@ -5530,11 +5553,15 @@ class GuideMarkWizard(tk.Toplevel):
         _s(self._num_fsize_pt,  "num_fsize_pt")
         _s(self._num_fsize3_pt, "num_fsize3_pt")
         _s(self._num_color,     "num_color")
-        _s(self._num_pos_x,     "num_pos_x")
-        _s(self._num_pos_y,     "num_pos_y")
-        _s(self._num_tracking,  "num_tracking")
-        _s(self._num_kern_mode, "num_kern_mode")
-        _s(self._cut_line_show, "cut_line_show")
+        _s(self._num_pos_x,      "num_pos_x")
+        _s(self._num_pos_y,      "num_pos_y")
+        _s(self._num_tracking,   "num_tracking")
+        _s(self._num_kern_mode,  "num_kern_mode")
+        _s(self._num3_pos_x,     "num3_pos_x")
+        _s(self._num3_pos_y,     "num3_pos_y")
+        _s(self._num3_tracking,  "num3_tracking")
+        _s(self._num3_kern_mode, "num3_kern_mode")
+        _s(self._cut_line_show,  "cut_line_show")
         _s(self._cut_line_pt,   "cut_line_pt")
         tp = d.get("template_path", "")
         if tp and os.path.isfile(tp):
@@ -5961,16 +5988,6 @@ class GuideMarkWizard(tk.Toplevel):
                      font=FONT_SM).pack(side="left", padx=2)
         row(_t("gmw.num_fsize"), _nfsize)
 
-        def _nfsize3(p):
-            self._num_fsize3_spin = tk.Spinbox(
-                p, textvariable=self._num_fsize3_pt, from_=4, to=999,
-                width=6, bg=BG3, fg=FG, insertbackground=FG,
-                relief="flat", buttonbackground=BG3, state="disabled")
-            self._num_fsize3_spin.pack(side="left")
-            tk.Label(p, text="pt  (3+ digit)", bg=BG2, fg=FG2,
-                     font=FONT_SM).pack(side="left", padx=2)
-        row("  3-digit size", _nfsize3)
-
         def _ncol(p):
             entry(p, self._num_color, 9)
             swatch(p, self._num_color)
@@ -6057,6 +6074,44 @@ class GuideMarkWizard(tk.Toplevel):
         row("Position Y",
             lambda p: _pos_row(p, self._num_pos_y, self._pos_y_pct_str,
                                self._pos_y_mm_str, self._tile_h))
+
+        # ── 3-digit (100+) independent settings ───────────────────────
+        sec("━  3 chiffres (100+)")
+
+        def _nfsize3b(p):
+            self._num_fsize3_spin = tk.Spinbox(
+                p, textvariable=self._num_fsize3_pt, from_=4, to=999,
+                width=6, bg=BG3, fg=FG, insertbackground=FG,
+                relief="flat", buttonbackground=BG3, state="disabled")
+            self._num_fsize3_spin.pack(side="left")
+            tk.Label(p, text="pt", bg=BG2, fg=FG2,
+                     font=FONT_SM).pack(side="left", padx=2)
+        row(_t("gmw.num_fsize"), _nfsize3b)
+
+        def _nkern3(p):
+            cb = ttk.Combobox(p, textvariable=self._num3_kern_mode,
+                              values=["メトリクス", "オプティカル", "等幅"],
+                              state="readonly", width=16,
+                              style="Custom.TCombobox", font=FONT_SM)
+            cb.pack(side="left")
+        row("ケカニング :", _nkern3)
+
+        def _ntrack3(p):
+            sp = tk.Spinbox(p, textvariable=self._num3_tracking, from_=-200, to=200,
+                            increment=1, width=7, bg=BG3, fg=FG,
+                            insertbackground=FG, relief="flat",
+                            buttonbackground=BG3)
+            sp.pack(side="left")
+            tk.Label(p, text="px", bg=BG2, fg=FG2,
+                     font=FONT_SM).pack(side="left", padx=(4, 0))
+        row(_t("gmw.sub_tracking"), _ntrack3)
+
+        row("Position X",
+            lambda p: _pos_row(p, self._num3_pos_x, self._pos3_x_pct_str,
+                               self._pos3_x_mm_str, self._tile_w))
+        row("Position Y",
+            lambda p: _pos_row(p, self._num3_pos_y, self._pos3_y_pct_str,
+                               self._pos3_y_mm_str, self._tile_h))
 
         # ── Output options ─────────────────────────────────────────────
         sec("━  Output")
@@ -6523,12 +6578,13 @@ class GuideMarkWizard(tk.Toplevel):
         fp   = self._font_path(self._num_font_fam.get(),
                                self._num_font_sty.get())
         s    = str(n)
+        is3  = len(s) >= 3
 
         if self._num_auto.get():
             num_pt = self._auto_num_size(s, tw, th, fp, dpi)
         else:
             num_pt = (self._num_fsize3_pt.get()
-                      if len(s) >= 3 else self._num_fsize_pt.get())
+                      if is3 else self._num_fsize_pt.get())
 
         px = self._pt2px(num_pt, dpi)
         try:
@@ -6538,13 +6594,20 @@ class GuideMarkWizard(tk.Toplevel):
 
         col      = self._num_color.get() or "#000000"
         col_rgba = tuple(int(col.lstrip("#")[i:i+2], 16) for i in (0, 2, 4)) + (255,)
-        cx  = int(tw * self._num_pos_x.get() / 100)
-        cy  = int(th * self._num_pos_y.get() / 100)
-        tracking  = self._num_tracking.get()
-        kern_mode = self._num_kern_mode.get()
+
+        # Pick 1-2 digit vs 3+ digit independent settings
+        if is3:
+            cx        = int(tw * self._num3_pos_x.get() / 100)
+            cy        = int(th * self._num3_pos_y.get() / 100)
+            tracking  = self._num3_tracking.get()
+            kern_mode = self._num3_kern_mode.get()
+        else:
+            cx        = int(tw * self._num_pos_x.get() / 100)
+            cy        = int(th * self._num_pos_y.get() / 100)
+            tracking  = self._num_tracking.get()
+            kern_mode = self._num_kern_mode.get()
 
         if kern_mode == "等幅":
-            # 等幅: all characters spaced at a fixed slot width
             try:
                 slot_w = int(max(nf.getlength(ch) for ch in "0123456789"))
             except AttributeError:
