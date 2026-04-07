@@ -2689,6 +2689,50 @@ def _draw_tracked(drw, text, fnt, cx, cy, fill_rgba, tracking):
         x += adv + tracking
 
 
+def _draw_optical(drw, text, fnt, cx, cy, fill_rgba, tracking):
+    """Optical kerning: space characters by their visual ink extents, not advance widths."""
+    if not text:
+        return
+    from PIL import Image as _OI, ImageDraw as _OD
+    ink_widths = []
+    ink_left_pads = []
+    for ch in text:
+        # Render char on tiny canvas, measure actual ink bounds
+        bb = drw.textbbox((0, 0), ch, font=fnt)
+        ch_w = max(1, bb[2] - bb[0])
+        ch_h = max(1, bb[3] - bb[1])
+        tmp = _OI.new("L", (ch_w + 20, ch_h + 20), 0)
+        _OD.Draw(tmp).text((10 - bb[0], 10 - bb[1]), ch, fill=255, font=fnt)
+        col_sums = [sum(tmp.getdata()[r * tmp.width + c]
+                        for r in range(tmp.height))
+                    for c in range(tmp.width)]
+        nonzero = [i for i, v in enumerate(col_sums) if v > 0]
+        if nonzero:
+            ink_l = nonzero[0]
+            ink_r = nonzero[-1]
+            ink_widths.append(ink_r - ink_l + 1)
+            ink_left_pads.append(ink_l)
+        else:
+            # Whitespace char
+            try:
+                adv = int(fnt.getlength(ch))
+            except AttributeError:
+                adv = ch_w
+            ink_widths.append(adv)
+            ink_left_pads.append(0)
+    # Visual gap between chars: ~20% of average ink width + tracking
+    avg_ink = sum(ink_widths) / max(1, len(ink_widths))
+    gap = max(0, int(avg_ink * 0.20)) + tracking
+    total_w = sum(ink_widths) + gap * (len(text) - 1)
+    x = cx - total_w // 2
+    for ch, iw, il in zip(text, ink_widths, ink_left_pads):
+        # Draw so the ink's left edge aligns to x
+        bb = drw.textbbox((0, 0), ch, font=fnt)
+        draw_x = x - il - bb[0]
+        drw.text((draw_x, cy), ch, fill=fill_rgba, font=fnt, anchor="lm")
+        x += iw + gap
+
+
 def _gen_image(number, width, height, bg_mode, bg_color, bg_image_path,
                text_color, font_name, font_size, corner_mode, corner_radius,
                shadow_on=False, shadow_color="#000000", shadow_offset_x=4, shadow_offset_y=4,
@@ -5934,11 +5978,13 @@ class GuideMarkWizard(tk.Toplevel):
 
         def _ntrack(p):
             # Kerning mode radios
-            for lbl, key in [("Proportionnel", "metrics"), ("Fixe (等幅)", "fixed")]:
+            for lbl, key in [("Proportionnel", "metrics"),
+                             ("オプティカル", "optical"),
+                             ("Fixe (等幅)", "fixed")]:
                 tk.Radiobutton(
                     p, text=lbl, value=key, variable=self._num_kern_mode,
                     bg=BG2, fg=FG2, selectcolor=BG3, activebackground=BG2,
-                    font=("Segoe UI", 7)).pack(side="left", padx=(0, 6))
+                    font=("Segoe UI", 7)).pack(side="left", padx=(0, 4))
             # Tracking amount
             sp = tk.Spinbox(p, textvariable=self._num_tracking, from_=-200, to=200,
                             increment=1, width=5, bg=BG3, fg=FG,
@@ -6516,6 +6562,8 @@ class GuideMarkWizard(tk.Toplevel):
                 draw.text((x + (slot_w - ch_w) // 2, cy), ch,
                           fill=col_rgba, font=nf, anchor="lm")
                 x += slot_w
+        elif kern_mode == "optical":
+            _draw_optical(draw, s, nf, cx, cy, col_rgba, tracking)
         elif tracking != 0:
             _draw_tracked(draw, s, nf, cx, cy, col_rgba, tracking)
         else:
