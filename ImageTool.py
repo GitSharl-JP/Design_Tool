@@ -6358,15 +6358,15 @@ class GuideMarkWizard(tk.Toplevel):
         if tw <= 0 or th <= 0:
             return [_I.new("RGB", (max(1, PW), max(1, PH)), "white")]
 
-        # Compute cols/rows in mm (float) so the result is DPI-independent.
-        # Using px with different DPIs produces different rounding, causing
-        # the preview layout to differ from the exported layout.
-        _gap_mm    = self._gap.get()
-        _margin_mm = self._margin.get()
-        cols = max(1, int((pw_mm - 2*_margin_mm + _gap_mm) /
-                         (self._tile_w.get() + _gap_mm)))
-        rows = max(1, int((ph_mm - 2*_margin_mm + _gap_mm) /
-                         (self._tile_h.get() + _gap_mm)))
+        # Always compute cols/rows at the same fixed DPI (72) used by the
+        # visible preview so that export and preview always show the same grid.
+        def mm2px72(mm): return round(mm / 25.4 * 72)
+        cols = max(1, (mm2px72(pw_mm) - 2*mm2px72(self._margin.get())
+                       + mm2px72(self._gap.get()))
+                      // (mm2px72(self._tile_w.get()) + mm2px72(self._gap.get())))
+        rows = max(1, (mm2px72(ph_mm) - 2*mm2px72(self._margin.get())
+                       + mm2px72(self._gap.get()))
+                      // (mm2px72(self._tile_h.get()) + mm2px72(self._gap.get())))
         per_page = cols * rows
         nums     = self._parse_range()
         self._last_total  = len(nums)
@@ -6383,6 +6383,10 @@ class GuideMarkWizard(tk.Toplevel):
         cut_lw = 0
         if self._cut_line_show.get():
             cut_lw = max(1, round(self._cut_line_pt.get() * dpi / 72))
+            if dpi_override is not None:
+                # Preview renders at low DPI — force minimum visible line
+                # width so Show/Hide and thickness are clearly perceivable.
+                cut_lw = max(3, cut_lw)
 
         pages = []
         for page_start in range(0, max(1, len(nums)), per_page):
