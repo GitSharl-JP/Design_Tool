@@ -5295,6 +5295,7 @@ class GuideMarkWizard(tk.Toplevel):
         self._gap           = tk.DoubleVar(value=5.0)
         self._dpi           = tk.IntVar(value=300)
         self._out_folder    = tk.StringVar()
+        self._export_name   = tk.StringVar(value="guidemark_layout")
         self._printer       = tk.StringVar(value="")
         self._printers: list = []
         self._monochrome    = tk.BooleanVar(value=True)
@@ -5989,7 +5990,7 @@ class GuideMarkWizard(tk.Toplevel):
 
         sec("━  " + _t("gmw.paper"))
         fmt_row = tk.Frame(lp, bg=BG2)
-        fmt_row.pack(fill="x", padx=14, pady=(2, 6))
+        fmt_row.pack(fill="x", padx=14, pady=(2, 4))
         for fk, fl in (
             (list(self.PAPER_MM)[0], "A3ノビ"),
             (list(self.PAPER_MM)[1], "A3"),
@@ -6003,6 +6004,20 @@ class GuideMarkWizard(tk.Toplevel):
                 relief="flat", overrelief="groove",
                 activebackground=BG3, activeforeground=FG
             ).pack(side="left", padx=(0, 4))
+        # mm dimension label — updates on paper/orient change
+        self._paper_mm_lbl = tk.Label(lp, bg=BG2, fg=FG2, font=("Segoe UI", 7))
+        self._paper_mm_lbl.pack(anchor="w", padx=14, pady=(0, 4))
+        def _upd_mm_lbl(*_):
+            if not self.winfo_exists(): return
+            pw, ph = self.PAPER_MM.get(self._paper.get(), (0, 0))
+            if self._orient.get() == "portrait":
+                pw, ph = min(pw, ph), max(pw, ph)
+            else:
+                pw, ph = max(pw, ph), min(pw, ph)
+            self._paper_mm_lbl.configure(text=f"=> {pw} x {ph} mm")
+        self._paper.trace_add("write", _upd_mm_lbl)
+        self._orient.trace_add("write", _upd_mm_lbl)
+        _upd_mm_lbl()
 
         def _orient_w(p):
             for val, key in (("landscape", "gmw.landscape"),
@@ -6050,6 +6065,14 @@ class GuideMarkWizard(tk.Toplevel):
                       command=self._pick_out_folder).pack(side="left",
                                                           padx=(4, 0))
         row(_t("gmw.out_folder"), _out_w)
+
+        def _name_w(p):
+            tk.Entry(p, textvariable=self._export_name, bg=BG3, fg=FG,
+                     insertbackground=FG, relief="flat",
+                     width=14).pack(side="left", fill="x", expand=True)
+            tk.Label(p, text=".png / .pdf", bg=BG2, fg=FG2,
+                     font=("Segoe UI", 7)).pack(side="left", padx=(4, 0))
+        row("File name", _name_w)
 
         def _pr_w(p):
             self._printer_cb = ttk.Combobox(
@@ -6495,14 +6518,15 @@ class GuideMarkWizard(tk.Toplevel):
         pages = self._generate_layout()
         if not pages:
             return
+        base = os.path.splitext(self._export_name.get().strip() or "guidemark_layout")[0]
         for i, sheet in enumerate(pages):
             suffix = f"_p{i + 1}" if len(pages) > 1 else ""
-            out_path = os.path.join(out_dir, f"guidemark_layout{suffix}.png")
+            out_path = os.path.join(out_dir, f"{base}{suffix}.png")
             sheet.save(out_path, "PNG")
         messagebox.showinfo(
             _t("gmw.title"),
             _t("gmw.done_png",
-               path=os.path.join(out_dir, "guidemark_layout.png")),
+               path=os.path.join(out_dir, f"{base}.png")),
             parent=self)
         try:
             os.startfile(out_dir)
@@ -6518,7 +6542,20 @@ class GuideMarkWizard(tk.Toplevel):
         pages = self._generate_layout()
         if not pages:
             return
-        out_path = os.path.join(out_dir, "guidemark_layout.pdf")
+        base = os.path.splitext(self._export_name.get().strip() or "guidemark_layout")[0]
+        out_path = filedialog.asksaveasfilename(
+            parent=self,
+            title="Save PDF as",
+            initialdir=out_dir,
+            initialfile=f"{base}.pdf",
+            defaultextension=".pdf",
+            filetypes=[("PDF", "*.pdf"), ("All files", "*.*")])
+        if not out_path:
+            return
+        # resolution=DPI encodes the physical page size in the PDF:
+        # page_width_in = px_width / dpi  =>  mm = in * 25.4
+        # Our pages are already generated at the correct DPI so the
+        # resulting PDF page has the exact mm dimensions set in step 2.
         pages[0].save(
             out_path, "PDF",
             resolution=max(72, self._dpi.get()),
