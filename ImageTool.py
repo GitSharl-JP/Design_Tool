@@ -5273,6 +5273,8 @@ class GuideMarkWizard(tk.Toplevel):
         self._num_auto      = tk.BooleanVar(value=True)
         self._num_fsize_pt  = tk.IntVar(value=120)
         self._num_color     = tk.StringVar(value="#000000")
+        self._num_pos_x     = tk.IntVar(value=50)   # % of tile width
+        self._num_pos_y     = tk.IntVar(value=42)   # % of tile height
         self._preview_num   = tk.IntVar(value=1)
 
         self._sched_tile_id   = None
@@ -5289,6 +5291,7 @@ class GuideMarkWizard(tk.Toplevel):
         for v in (self._monochrome,
                   self._num_font_fam, self._num_font_sty, self._num_auto,
                   self._num_fsize_pt, self._num_color,
+                  self._num_pos_x, self._num_pos_y,
                   self._tile_w, self._tile_h, self._preview_num):
             v.trace_add("write", lambda *_: self._schedule_tile_preview())
 
@@ -5609,6 +5612,22 @@ class GuideMarkWizard(tk.Toplevel):
             entry(p, self._num_color, 9)
             swatch(p, self._num_color)
         row(_t("gmw.num_color"), _ncol)
+
+        # ── Position sliders ───────────────────────────────────────────
+        def _pos_slider(p, var, label_var_ref):
+            lbl = tk.Label(p, text=f"{var.get()}%", bg=BG2, fg=FG2,
+                           font=FONT_SM, width=4)
+            sc = tk.Scale(p, variable=var, from_=0, to=100,
+                          orient="horizontal", bg=BG2, fg=FG, troughcolor=BG3,
+                          highlightthickness=0, showvalue=False, length=150,
+                          command=lambda v, l=lbl: l.configure(text=f"{int(float(v))}%"))
+            sc.pack(side="left")
+            lbl.pack(side="left", padx=(4, 0))
+
+        def _px(p): _pos_slider(p, self._num_pos_x, None)
+        def _py(p): _pos_slider(p, self._num_pos_y, None)
+        row("Position X", _px)
+        row("Position Y", _py)
 
         # ── Output options ─────────────────────────────────────────────
         sec("━  Output")
@@ -5947,9 +5966,10 @@ class GuideMarkWizard(tk.Toplevel):
             nf = _F.load_default()
 
         col = self._num_color.get() or "#000000"
-        cy  = int(th * 0.42)   # ~upper-centre of the arc area
+        cx  = int(tw * self._num_pos_x.get() / 100)
+        cy  = int(th * self._num_pos_y.get() / 100)
         bb  = draw.textbbox((0, 0), s, font=nf)
-        nx  = (tw - (bb[2] - bb[0])) // 2 - bb[0]
+        nx  = cx - (bb[2] - bb[0]) // 2 - bb[0]
         ny  = cy - (bb[3] - bb[1]) // 2 - bb[1]
         draw.text((nx, ny), s, font=nf, fill=col)
         return tile
