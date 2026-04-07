@@ -5276,6 +5276,12 @@ class GuideMarkWizard(tk.Toplevel):
         self._num_pos_x     = tk.IntVar(value=50)   # % of tile width
         self._num_pos_y     = tk.IntVar(value=42)   # % of tile height
         self._preview_num   = tk.IntVar(value=1)
+        # ── Display helpers (driven by traces after _build) ────────────────
+        self._pos_x_pct_str = tk.StringVar(value="50%")
+        self._pos_y_pct_str = tk.StringVar(value="42%")
+        self._pos_x_px_str  = tk.StringVar(value="")
+        self._pos_y_px_str  = tk.StringVar(value="")
+        self._tile_px_str   = tk.StringVar(value="")
 
         self._sched_tile_id   = None
         self._sched_layout_id = None
@@ -5298,6 +5304,24 @@ class GuideMarkWizard(tk.Toplevel):
         for v in (self._num_range_str, self._paper, self._orient,
                   self._margin, self._gap, self._dpi):
             v.trace_add("write", lambda *_: self._schedule_layout_preview())
+
+        def _upd_px_displays(*_):
+            if not self.winfo_exists():
+                return
+            dpi   = max(1, self._dpi.get())
+            tw_px = max(1, round(self._tile_w.get() / 25.4 * dpi))
+            th_px = max(1, round(self._tile_h.get() / 25.4 * dpi))
+            self._tile_px_str.set(f"= {tw_px} × {th_px} px")
+            self._pos_x_pct_str.set(f"{self._num_pos_x.get()}%")
+            self._pos_y_pct_str.set(f"{self._num_pos_y.get()}%")
+            self._pos_x_px_str.set(
+                f"≈ {round(self._num_pos_x.get() / 100 * tw_px)} px")
+            self._pos_y_px_str.set(
+                f"≈ {round(self._num_pos_y.get() / 100 * th_px)} px")
+        for v in (self._tile_w, self._tile_h, self._dpi,
+                  self._num_pos_x, self._num_pos_y):
+            v.trace_add("write", _upd_px_displays)
+        _upd_px_displays()
 
     # ═════════════════════════════════════════════════════════════════════
     # Template persistence
@@ -5613,21 +5637,40 @@ class GuideMarkWizard(tk.Toplevel):
             swatch(p, self._num_color)
         row(_t("gmw.num_color"), _ncol)
 
-        # ── Position sliders ───────────────────────────────────────────
-        def _pos_slider(p, var, label_var_ref):
-            lbl = tk.Label(p, text=f"{var.get()}%", bg=BG2, fg=FG2,
-                           font=FONT_SM, width=4)
-            sc = tk.Scale(p, variable=var, from_=0, to=100,
+        # ── Number position (slider + % label + ≈px display + direct px entry)
+        def _pos_row(p, pct_var, pct_str, px_str, mm_dim_var):
+            sc = tk.Scale(p, variable=pct_var, from_=0, to=100,
                           orient="horizontal", bg=BG2, fg=FG, troughcolor=BG3,
-                          highlightthickness=0, showvalue=False, length=150,
-                          command=lambda v, l=lbl: l.configure(text=f"{int(float(v))}%"))
+                          highlightthickness=0, showvalue=False, length=100)
             sc.pack(side="left")
-            lbl.pack(side="left", padx=(4, 0))
+            tk.Label(p, textvariable=pct_str, bg=BG2, fg=FG2,
+                     font=FONT_SM, width=4, anchor="w").pack(
+                         side="left", padx=(4, 0))
+            tk.Label(p, textvariable=px_str, bg=BG2, fg=FG2,
+                     font=("Segoe UI", 7), width=8, anchor="w").pack(
+                         side="left", padx=(6, 2))
+            px_ent = tk.Entry(p, bg=BG3, fg=FG, insertbackground=FG,
+                              relief="flat", width=5, justify="right")
+            px_ent.pack(side="left")
+            tk.Label(p, text="px", bg=BG2, fg=FG2,
+                     font=FONT_SM).pack(side="left", padx=(2, 0))
+            def _apply(e=None, _v=pct_var, _e=px_ent, _d=mm_dim_var):
+                try:
+                    pv = int(_e.get())
+                    dpi = max(1, self._dpi.get())
+                    tile_px = max(1, round(_d.get() / 25.4 * dpi))
+                    _v.set(max(0, min(100, round(pv / tile_px * 100))))
+                except ValueError:
+                    pass
+            px_ent.bind("<Return>",   _apply)
+            px_ent.bind("<FocusOut>", _apply)
 
-        def _px(p): _pos_slider(p, self._num_pos_x, None)
-        def _py(p): _pos_slider(p, self._num_pos_y, None)
-        row("Position X", _px)
-        row("Position Y", _py)
+        row("Position X",
+            lambda p: _pos_row(p, self._num_pos_x, self._pos_x_pct_str,
+                               self._pos_x_px_str, self._tile_w))
+        row("Position Y",
+            lambda p: _pos_row(p, self._num_pos_y, self._pos_y_pct_str,
+                               self._pos_y_px_str, self._tile_h))
 
         # ── Output options ─────────────────────────────────────────────
         sec("━  Output")
@@ -5665,6 +5708,8 @@ class GuideMarkWizard(tk.Toplevel):
             spin(p, self._tile_h, 1, 500, inc=0.5, w=7, fmt="%.1f")
             tk.Label(p, text="mm", bg=BG2, fg=FG2,
                      font=FONT_SM).pack(side="left", padx=2)
+            tk.Label(p, textvariable=self._tile_px_str, bg=BG2, fg=FG2,
+                     font=("Segoe UI", 7)).pack(side="left", padx=(10, 0))
         adv_row(_t("gmw.tile_size"), _tsize)
         adv_row(_t("gmw.dpi"),
                 lambda p: spin(p, self._dpi, 72, 600, w=6))
