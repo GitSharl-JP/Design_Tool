@@ -5420,12 +5420,13 @@ class GuideMarkWizard(tk.Toplevel):
         inner = tk.Frame(add, bg=BG3, width=170, height=220)
         inner.pack_propagate(False)
         inner.pack()
-        tk.Label(inner, text="+", bg=BG3, fg=FG2,
-                 font=("Segoe UI", 52)).place(relx=0.5, rely=0.42,
-                                              anchor="center")
-        tk.Label(inner, text="Add template", bg=BG3, fg=FG2,
-                 font=FONT_SM).place(relx=0.5, rely=0.75, anchor="center")
-        for w in (add, inner):
+        plus_lbl = tk.Label(inner, text="+", bg=BG3, fg=FG2,
+                             font=("Segoe UI", 52))
+        plus_lbl.place(relx=0.5, rely=0.42, anchor="center")
+        hint_lbl = tk.Label(inner, text="Add template", bg=BG3, fg=FG2,
+                             font=FONT_SM)
+        hint_lbl.place(relx=0.5, rely=0.75, anchor="center")
+        for w in (add, inner, plus_lbl, hint_lbl):
             w.bind("<Button-1>", lambda e: self._add_template())
 
     def _make_card(self, tpl: dict):
@@ -5457,9 +5458,9 @@ class GuideMarkWizard(tk.Toplevel):
                            font=("Segoe UI", 24))
 
         # Name
-        tk.Label(card, text=name, bg=BG3, fg=FG, font=FONT_SM,
-                 wraplength=160, justify="center").pack(
-                     padx=10, pady=(6, 2))
+        name_lbl = tk.Label(card, text=name, bg=BG3, fg=FG, font=FONT_SM,
+                             wraplength=160, justify="center")
+        name_lbl.pack(padx=10, pady=(6, 2))
 
         # Remove button
         del_lbl = tk.Label(card, text="✕  remove", bg=BG3, fg=FG2,
@@ -5480,7 +5481,7 @@ class GuideMarkWizard(tk.Toplevel):
                                           if self._templates else {})
                 self._refresh_cards()
 
-        for w in (card, tc):
+        for w in (card, tc, name_lbl):
             w.bind("<Button-1>", lambda e, fn=_select: fn())
         del_lbl.bind("<Button-1>", lambda e, fn=_remove: fn())
 
