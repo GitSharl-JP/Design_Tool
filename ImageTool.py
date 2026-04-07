@@ -5236,6 +5236,9 @@ class GuideMarkWizard(tk.Toplevel):
     _TPL_CFG = os.path.join(
         os.path.dirname(os.path.abspath(__file__)),
         "_guidemark_templates.json")
+    _PRESET_CFG = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "_guidemark_presets.json")
 
     PAPER_MM = {
         "A3ノビ  (483×329 mm)": (483, 329),
@@ -5287,7 +5290,14 @@ class GuideMarkWizard(tk.Toplevel):
         self._sched_layout_id = None
         self._tile_tk   = None
         self._layout_tk = None
-        self._layout_info = tk.StringVar(value="—")
+        self._layout_info     = tk.StringVar(value="—")
+        self._layout_pages:   list = []
+        self._layout_page_idx = tk.IntVar(value=0)
+        self._layout_page_str = tk.StringVar(value="—")
+        self._cut_line_show   = tk.BooleanVar(value=True)
+        self._cut_line_pt     = tk.DoubleVar(value=0.2)
+        self._preset_name     = tk.StringVar(value="")
+        self._presets: list   = self._load_presets()
         self._thumb_cache: dict = {}
 
         self._build()
@@ -5302,7 +5312,8 @@ class GuideMarkWizard(tk.Toplevel):
             v.trace_add("write", lambda *_: self._schedule_tile_preview())
 
         for v in (self._num_range_str, self._paper, self._orient,
-                  self._margin, self._gap, self._dpi):
+                  self._margin, self._gap, self._dpi,
+                  self._cut_line_show, self._cut_line_pt):
             v.trace_add("write", lambda *_: self._schedule_layout_preview())
 
         def _upd_px_displays(*_):
@@ -5342,6 +5353,112 @@ class GuideMarkWizard(tk.Toplevel):
                 json.dump(self._templates, f, ensure_ascii=False, indent=2)
         except Exception:
             pass
+
+    # ═════════════════════════════════════════════════════════════════════
+    # Preset persistence
+    # ═════════════════════════════════════════════════════════════════════
+    def _load_presets(self) -> list:
+        try:
+            with open(self._PRESET_CFG, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return []
+
+    def _save_presets(self):
+        try:
+            with open(self._PRESET_CFG, "w", encoding="utf-8") as f:
+                json.dump(self._presets, f, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
+
+    def _preset_data(self) -> dict:
+        return {
+            "name":          self._preset_name.get(),
+            "num_range":     self._num_range_str.get(),
+            "tile_w":        self._tile_w.get(),
+            "tile_h":        self._tile_h.get(),
+            "margin":        self._margin.get(),
+            "gap":           self._gap.get(),
+            "dpi":           self._dpi.get(),
+            "paper":         self._paper.get(),
+            "orient":        self._orient.get(),
+            "monochrome":    self._monochrome.get(),
+            "num_font_fam":  self._num_font_fam.get(),
+            "num_font_sty":  self._num_font_sty.get(),
+            "num_auto":      self._num_auto.get(),
+            "num_fsize_pt":  self._num_fsize_pt.get(),
+            "num_color":     self._num_color.get(),
+            "num_pos_x":     self._num_pos_x.get(),
+            "num_pos_y":     self._num_pos_y.get(),
+            "cut_line_show": self._cut_line_show.get(),
+            "cut_line_pt":   self._cut_line_pt.get(),
+            "template_path": self._selected_tpl.get("path", ""),
+        }
+
+    def _apply_preset(self, d: dict):
+        def _s(var, key): var.set(d[key]) if key in d else None
+        _s(self._num_range_str, "num_range")
+        _s(self._tile_w,        "tile_w")
+        _s(self._tile_h,        "tile_h")
+        _s(self._margin,        "margin")
+        _s(self._gap,           "gap")
+        _s(self._dpi,           "dpi")
+        _s(self._paper,         "paper")
+        _s(self._orient,        "orient")
+        _s(self._monochrome,    "monochrome")
+        _s(self._num_font_fam,  "num_font_fam")
+        _s(self._num_font_sty,  "num_font_sty")
+        _s(self._num_auto,      "num_auto")
+        _s(self._num_fsize_pt,  "num_fsize_pt")
+        _s(self._num_color,     "num_color")
+        _s(self._num_pos_x,     "num_pos_x")
+        _s(self._num_pos_y,     "num_pos_y")
+        _s(self._cut_line_show, "cut_line_show")
+        _s(self._cut_line_pt,   "cut_line_pt")
+        tp = d.get("template_path", "")
+        if tp:
+            match = next((t for t in self._templates
+                          if t.get("path") == tp), None)
+            if match:
+                self._selected_tpl = match
+                self._refresh_cards()
+        self._toggle_num_spin()
+
+    def _save_preset_as(self):
+        name = self._preset_name.get().strip()
+        if not name:
+            messagebox.showwarning("Preset",
+                "Enter a preset name in the field first.", parent=self)
+            return
+        d = self._preset_data()
+        d["name"] = name
+        for i, p in enumerate(self._presets):
+            if p.get("name") == name:
+                self._presets[i] = d
+                break
+        else:
+            self._presets.append(d)
+        self._save_presets()
+        if hasattr(self, "_preset_cb"):
+            self._preset_cb["values"] = [p["name"] for p in self._presets]
+        messagebox.showinfo("Preset", f'Preset "{name}" saved.', parent=self)
+
+    def _load_selected_preset(self):
+        name = self._preset_name.get().strip()
+        d = next((p for p in self._presets if p.get("name") == name), None)
+        if d:
+            self._apply_preset(d)
+        else:
+            messagebox.showwarning("Preset",
+                f'No preset named "{name}" found.', parent=self)
+
+    def _delete_preset(self):
+        name = self._preset_name.get().strip()
+        self._presets = [p for p in self._presets if p.get("name") != name]
+        self._save_presets()
+        self._preset_name.set("")
+        if hasattr(self, "_preset_cb"):
+            self._preset_cb["values"] = [p["name"] for p in self._presets]
 
     # ═════════════════════════════════════════════════════════════════════
     # Build
@@ -5590,6 +5707,28 @@ class GuideMarkWizard(tk.Toplevel):
             var.trace_add("write", lambda *_: (
                 b.configure(bg=var.get()) if b.winfo_exists() else None))
 
+        # ── Preset ────────────────────────────────────────────────────
+        sec("━  Preset")
+        pr_row = tk.Frame(lp, bg=BG2)
+        pr_row.pack(fill="x", padx=16, pady=4)
+        self._preset_cb = ttk.Combobox(
+            pr_row, textvariable=self._preset_name,
+            values=[p["name"] for p in self._presets],
+            state="normal", width=13, style="Custom.TCombobox")
+        self._preset_cb.pack(side="left", fill="x", expand=True)
+        tk.Button(pr_row, text="Load", bg=BG3, fg=FG, relief="flat",
+                  font=FONT_SM, cursor="hand2",
+                  command=self._load_selected_preset).pack(
+                      side="left", padx=(4, 0))
+        tk.Button(pr_row, text="Save", bg=ACCENT, fg="#ffffff",
+                  relief="flat", font=FONT_SM, cursor="hand2",
+                  command=self._save_preset_as).pack(
+                      side="left", padx=(4, 0))
+        tk.Button(pr_row, text="✕", bg=BG3, fg=FG2, relief="flat",
+                  font=FONT_SM, cursor="hand2",
+                  command=self._delete_preset).pack(
+                      side="left", padx=(4, 0))
+
         # ── Numbers ────────────────────────────────────────────────────
         sec("━  " + _t("gmw.num_range"))
         nr = tk.Frame(lp, bg=BG2)
@@ -5769,12 +5908,21 @@ class GuideMarkWizard(tk.Toplevel):
                        **kw).pack(side="left")
 
         sec("━  " + _t("gmw.paper"))
-
-        def _paper_w(p):
-            ttk.Combobox(p, textvariable=self._paper,
-                         values=list(self.PAPER_MM), state="readonly",
-                         width=18, style="Custom.TCombobox").pack(side="left")
-        row(_t("gmw.paper"), _paper_w)
+        fmt_row = tk.Frame(lp, bg=BG2)
+        fmt_row.pack(fill="x", padx=14, pady=(2, 6))
+        for fk, fl in (
+            (list(self.PAPER_MM)[0], "A3ノビ"),
+            (list(self.PAPER_MM)[1], "A3"),
+            (list(self.PAPER_MM)[2], "A4"),
+        ):
+            tk.Radiobutton(
+                fmt_row, text=fl, variable=self._paper, value=fk,
+                bg=BG3, fg=FG, selectcolor=ACCENT,
+                font=("Segoe UI", 9, "bold"),
+                indicatoron=0, padx=12, pady=5, cursor="hand2",
+                relief="flat", overrelief="groove",
+                activebackground=BG3, activeforeground=FG
+            ).pack(side="left", padx=(0, 4))
 
         def _orient_w(p):
             for val, key in (("landscape", "gmw.landscape"),
@@ -5792,6 +5940,20 @@ class GuideMarkWizard(tk.Toplevel):
         row(_t("gmw.margin"), lambda p: _mm(p, self._margin))
         row(_t("gmw.gap"),    lambda p: _mm(p, self._gap))
         row(_t("gmw.dpi"),    lambda p: spin(p, self._dpi, 72, 600, w=6))
+
+        sec("━  Cut lines")
+        cut_row = tk.Frame(lp, bg=BG2)
+        cut_row.pack(fill="x", padx=14, pady=4)
+        tk.Checkbutton(cut_row, text="Show", variable=self._cut_line_show,
+                       bg=BG2, fg=FG, selectcolor=BG3,
+                       activebackground=BG2, font=FONT_SM).pack(side="left")
+        tk.Spinbox(cut_row, textvariable=self._cut_line_pt,
+                   from_=0.1, to=5.0, increment=0.1, width=5,
+                   bg=BG3, fg=FG, insertbackground=FG, relief="flat",
+                   buttonbackground=BG3,
+                   format="%.1f").pack(side="left", padx=(8, 0))
+        tk.Label(cut_row, text="pt", bg=BG2, fg=FG2,
+                 font=FONT_SM).pack(side="left", padx=2)
 
         sec("━  " + _t("gmw.out_folder"))
 
@@ -5841,9 +6003,21 @@ class GuideMarkWizard(tk.Toplevel):
         self._layout_canvas.bind(
             "<Configure>", lambda e: self._schedule_layout_preview(300))
 
-        tk.Label(rp, textvariable=self._layout_info,
-                 bg=BG, fg=FG2, font=FONT_SM).grid(
-                     row=1, column=0, sticky="w", pady=(4, 0))
+        page_nav = tk.Frame(rp, bg=BG)
+        page_nav.grid(row=1, column=0, sticky="ew", pady=(6, 0))
+        self._page_prev_btn = tk.Button(
+            page_nav, text="◄", bg=BG3, fg=FG, relief="flat",
+            cursor="hand2", state="disabled", command=self._page_prev)
+        self._page_prev_btn.pack(side="left")
+        tk.Label(page_nav, textvariable=self._layout_page_str,
+                 bg=BG, fg=FG, font=("Segoe UI", 9, "bold")).pack(
+                     side="left")
+        self._page_next_btn = tk.Button(
+            page_nav, text="►", bg=BG3, fg=FG, relief="flat",
+            cursor="hand2", state="disabled", command=self._page_next)
+        self._page_next_btn.pack(side="left")
+        tk.Label(page_nav, textvariable=self._layout_info,
+                 bg=BG, fg=FG2, font=FONT_SM).pack(side="right")
 
     # ═════════════════════════════════════════════════════════════════════
     # Navigation
@@ -5890,6 +6064,45 @@ class GuideMarkWizard(tk.Toplevel):
     def _go_back(self):
         if self._step > 0:
             self._show_step(self._step - 1)
+
+    def _page_prev(self):
+        idx = max(0, self._layout_page_idx.get() - 1)
+        self._layout_page_idx.set(idx)
+        self._show_layout_page()
+
+    def _page_next(self):
+        idx = min(len(self._layout_pages) - 1,
+                  self._layout_page_idx.get() + 1)
+        self._layout_page_idx.set(idx)
+        self._show_layout_page()
+
+    def _show_layout_page(self):
+        if not self._layout_pages or not self.winfo_exists():
+            return
+        idx = max(0, min(self._layout_page_idx.get(),
+                         len(self._layout_pages) - 1))
+        cw = self._layout_canvas.winfo_width()
+        ch = self._layout_canvas.winfo_height()
+        if cw < 10 or ch < 10:
+            return
+        from PIL import ImageTk as _ITk
+        sheet = self._layout_pages[idx]
+        sw, sh = sheet.size
+        scale = min(cw / sw, ch / sh, 1.0)
+        nw, nh = max(1, int(sw * scale)), max(1, int(sh * scale))
+        self._layout_tk = _ITk.PhotoImage(sheet.resize((nw, nh)))
+        self._layout_canvas.delete("all")
+        self._layout_canvas.create_image(
+            (cw - nw) // 2, (ch - nh) // 2,
+            anchor="nw", image=self._layout_tk)
+        total = len(self._layout_pages)
+        self._layout_page_str.set(f"  Page  {idx + 1} / {total}  ")
+        if hasattr(self, "_page_prev_btn"):
+            self._page_prev_btn.configure(
+                state="normal" if idx > 0 else "disabled")
+        if hasattr(self, "_page_next_btn"):
+            self._page_next_btn.configure(
+                state="normal" if idx < total - 1 else "disabled")
 
     # ═════════════════════════════════════════════════════════════════════
     # Toggles
@@ -6085,29 +6298,22 @@ class GuideMarkWizard(tk.Toplevel):
         if cw < 10 or ch < 10:
             return
         prev_dpi = max(36, min(72, self._dpi.get() // 4))
-        sheet = self._generate_layout(dpi_override=prev_dpi)
-        if sheet is None:
-            return
-        sw, sh = sheet.size
-        scale = min(cw / sw, ch / sh, 1.0)
-        nw, nh = max(1, int(sw * scale)), max(1, int(sh * scale))
-        from PIL import ImageTk as _ITk
-        self._layout_tk = _ITk.PhotoImage(sheet.resize((nw, nh)))
-        self._layout_canvas.delete("all")
-        self._layout_canvas.create_image(
-            (cw - nw) // 2, (ch - nh) // 2,
-            anchor="nw", image=self._layout_tk)
+        pages = self._generate_layout(dpi_override=prev_dpi)
+        self._layout_pages = pages
+        idx = max(0, min(self._layout_page_idx.get(), len(pages) - 1))
+        self._layout_page_idx.set(idx)
         self._layout_info.set(
             _t("gmw.layout_sum",
                placed=getattr(self, "_last_placed", 0),
                total=getattr(self,  "_last_total",  0),
                cols=getattr(self,   "_last_cols",   0),
                rows=getattr(self,   "_last_rows",   0)))
+        self._show_layout_page()
 
     # ═════════════════════════════════════════════════════════════════════
     # Layout engine
     # ═════════════════════════════════════════════════════════════════════
-    def _generate_layout(self, dpi_override=None):
+    def _generate_layout(self, dpi_override=None) -> list:
         from PIL import Image as _I, ImageDraw as _D
         dpi = dpi_override or max(72, self._dpi.get())
         pw_mm, ph_mm = self.PAPER_MM[self._paper.get()]
@@ -6124,41 +6330,41 @@ class GuideMarkWizard(tk.Toplevel):
         tw     = mm2px(self._tile_w.get())
         th     = mm2px(self._tile_h.get())
         if tw <= 0 or th <= 0:
-            return None
+            return [_I.new("RGB", (max(1, PW), max(1, PH)), "white")]
 
-        cols = max(1, (PW - 2*margin + gap) // (tw + gap))
-        rows = max(1, (PH - 2*margin + gap) // (th + gap))
-        nums = self._parse_range()
+        cols     = max(1, (PW - 2*margin + gap) // (tw + gap))
+        rows     = max(1, (PH - 2*margin + gap) // (th + gap))
+        per_page = cols * rows
+        nums     = self._parse_range()
         self._last_total  = len(nums)
-        self._last_placed = 0
+        self._last_placed = len(nums)
         self._last_cols   = cols
         self._last_rows   = rows
 
-        sheet = _I.new("RGB", (PW, PH), "white")
-        draw  = _D.Draw(sheet)
+        cut_lw = 0
+        if self._cut_line_show.get():
+            cut_lw = max(1, round(self._cut_line_pt.get() * dpi / 72))
 
-        idx = 0
-        for r in range(rows):
-            for c in range(cols):
-                if idx >= len(nums):
-                    break
-                n  = nums[idx]
+        pages = []
+        for page_start in range(0, max(1, len(nums)), per_page):
+            chunk = nums[page_start:page_start + per_page]
+            sheet = _I.new("RGB", (PW, PH), "white")
+            draw  = _D.Draw(sheet)
+            for i, n in enumerate(chunk):
+                r  = i // cols
+                c  = i  % cols
                 x0 = margin + c * (tw + gap)
                 y0 = margin + r * (th + gap)
-                x1, y1 = x0 + tw, y0 + th
                 sheet.paste(self._render_tile(n, tw, th, dpi), (x0, y0))
-                self._last_placed += 1
-                ck = mm2px(3)
-                for px_, py_ in ((x0, y0), (x1, y0), (x0, y1), (x1, y1)):
-                    draw.line([(px_ - ck, py_), (px_ + ck, py_)],
-                              fill="#aaaaaa", width=1)
-                    draw.line([(px_, py_ - ck), (px_, py_ + ck)],
-                              fill="#aaaaaa", width=1)
-                idx += 1
+                if cut_lw:
+                    draw.rectangle(
+                        [x0, y0, x0 + tw - 1, y0 + th - 1],
+                        outline="#888888", width=cut_lw)
+            if self._monochrome.get():
+                sheet = sheet.convert("L").convert("RGB")
+            pages.append(sheet)
 
-        if self._monochrome.get():
-            sheet = sheet.convert("L").convert("RGB")
-        return sheet
+        return pages or [_I.new("RGB", (PW, PH), "white")]
 
     # ═════════════════════════════════════════════════════════════════════
     # Export / Print
@@ -6188,13 +6394,18 @@ class GuideMarkWizard(tk.Toplevel):
         out_dir = self._get_out_dir()
         if not out_dir:
             return
-        sheet = self._generate_layout()
-        if sheet is None:
+        pages = self._generate_layout()
+        if not pages:
             return
-        out_path = os.path.join(out_dir, "guidemark_layout.png")
-        sheet.save(out_path, "PNG")
-        messagebox.showinfo(_t("gmw.title"),
-                            _t("gmw.done_png", path=out_path), parent=self)
+        for i, sheet in enumerate(pages):
+            suffix = f"_p{i + 1}" if len(pages) > 1 else ""
+            out_path = os.path.join(out_dir, f"guidemark_layout{suffix}.png")
+            sheet.save(out_path, "PNG")
+        messagebox.showinfo(
+            _t("gmw.title"),
+            _t("gmw.done_png",
+               path=os.path.join(out_dir, "guidemark_layout.png")),
+            parent=self)
         try:
             os.startfile(out_dir)
         except Exception:
@@ -6206,11 +6417,15 @@ class GuideMarkWizard(tk.Toplevel):
         out_dir = self._get_out_dir()
         if not out_dir:
             return
-        sheet = self._generate_layout()
-        if sheet is None:
+        pages = self._generate_layout()
+        if not pages:
             return
         out_path = os.path.join(out_dir, "guidemark_layout.pdf")
-        sheet.save(out_path, "PDF", resolution=max(72, self._dpi.get()))
+        pages[0].save(
+            out_path, "PDF",
+            resolution=max(72, self._dpi.get()),
+            save_all=True,
+            append_images=pages[1:])
         messagebox.showinfo(_t("gmw.title"),
                             _t("gmw.done_pdf", path=out_path), parent=self)
         try:
@@ -6221,13 +6436,13 @@ class GuideMarkWizard(tk.Toplevel):
     def _print_layout(self):
         if not self._check_ready():
             return
-        sheet = self._generate_layout()
-        if sheet is None:
+        pages = self._generate_layout()
+        if not pages:
             return
         import tempfile
         tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
         tmp.close()
-        sheet.save(tmp.name, "PNG")
+        pages[0].save(tmp.name, "PNG")
         try:
             os.startfile(tmp.name, "print")
         except Exception as e:
