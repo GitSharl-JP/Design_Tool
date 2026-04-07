@@ -5327,6 +5327,7 @@ class GuideMarkWizard(tk.Toplevel):
 
         self._step = 0
         self._selected_tpl: dict = {}
+        self._selected_tpl3: dict = {}   # override template for 3-digit (100+) cards
         self._templates: list = self._load_templates()
 
         # ── State vars ────────────────────────────────────────────────────
@@ -5532,6 +5533,7 @@ class GuideMarkWizard(tk.Toplevel):
             "cut_line_show":   self._cut_line_show.get(),
             "cut_line_pt":   self._cut_line_pt.get(),
             "template_path": self._selected_tpl.get("path", ""),
+            "template3_path": self._selected_tpl3.get("path", ""),
         }
 
     def _apply_preset(self, d: dict):
@@ -5569,8 +5571,17 @@ class GuideMarkWizard(tk.Toplevel):
                 "path": tp,
                 "name": os.path.splitext(os.path.basename(tp))[0]
             }
+        tp3 = d.get("template3_path", "")
+        if tp3 and os.path.isfile(tp3):
+            self._selected_tpl3 = {
+                "path": tp3,
+                "name": os.path.splitext(os.path.basename(tp3))[0]
+            }
+        else:
+            self._selected_tpl3 = {}
         self._refresh_cards()
         self._update_step1_template_display()
+        self._update_step1_tpl3_display()
         self._toggle_num_spin()
         self._update_font_display()
 
@@ -5833,6 +5844,50 @@ class GuideMarkWizard(tk.Toplevel):
             except Exception:
                 self._step1_thumb_cv.create_text(25, 25, text="?", fill=FG2)
 
+    def _change_template3(self):
+        """Pick a separate background image for 3-digit (100+) cards."""
+        path = filedialog.askopenfilename(
+            parent=self,
+            title="Select template image (100+)",
+            filetypes=[("Images", "*.png *.jpg *.jpeg *.tif *.tiff *.bmp"),
+                       ("All files", "*.*")])
+        if not path:
+            return
+        path = os.path.normpath(path)
+        name = os.path.splitext(os.path.basename(path))[0]
+        self._selected_tpl3 = {"path": path, "name": name}
+        self._update_step1_tpl3_display()
+        self._schedule_tile_preview()
+
+    def _clear_template3(self):
+        """Remove the 3-digit template override (fall back to main template)."""
+        self._selected_tpl3 = {}
+        self._update_step1_tpl3_display()
+        self._schedule_tile_preview()
+
+    def _update_step1_tpl3_display(self):
+        """Refresh the 3-digit template thumbnail + label inside step 1."""
+        if not hasattr(self, "_step1_tpl3_thumb_cv"):
+            return
+        path = self._selected_tpl3.get("path", "")
+        name = self._selected_tpl3.get("name", "")
+        self._step1_tpl3_lbl.configure(
+            text=name if name else "— même template —")
+        self._step1_tpl3_thumb_cv.delete("all")
+        if path and os.path.isfile(path):
+            try:
+                from PIL import Image as _I, ImageTk as _ITk
+                img = _I.open(path).convert("RGB")
+                img.thumbnail((50, 50), _I.LANCZOS)
+                w_, h_ = img.size
+                thumb = _ITk.PhotoImage(img)
+                self._step1_tpl3_thumb_ref = thumb
+                self._step1_tpl3_thumb_cv.create_image(
+                    (50 - w_) // 2, (50 - h_) // 2, anchor="nw", image=thumb)
+            except Exception:
+                self._step1_tpl3_thumb_cv.create_text(25, 25, text="?",
+                                                       fill=FG2)
+
     # ── Step 1 : Configure ────────────────────────────────────────────────
     def _build_step1(self):
         f = self._frames[1]
@@ -6077,6 +6132,24 @@ class GuideMarkWizard(tk.Toplevel):
 
         # ── 3-digit (100+) independent settings ───────────────────────
         sec("━  3 chiffres (100+)")
+
+        # Template override for 100+ cards
+        tpl3_row = tk.Frame(lp, bg=BG2)
+        tpl3_row.pack(fill="x", padx=16, pady=4)
+        self._step1_tpl3_thumb_cv = tk.Canvas(tpl3_row, width=50, height=50,
+                                               bg="#f0f0f0",
+                                               highlightthickness=0)
+        self._step1_tpl3_thumb_cv.pack(side="left")
+        self._step1_tpl3_lbl = tk.Label(tpl3_row, text="— même template —",
+                                         bg=BG2, fg=FG2, font=FONT_SM,
+                                         wraplength=110, justify="left")
+        self._step1_tpl3_lbl.pack(side="left", padx=6)
+        tk.Button(tpl3_row, text="Change…", bg=BG3, fg=FG, relief="flat",
+                  font=FONT_SM, cursor="hand2",
+                  command=self._change_template3).pack(side="left")
+        tk.Button(tpl3_row, text="✕", bg=BG3, fg=FG2, relief="flat",
+                  font=FONT_SM, cursor="hand2",
+                  command=self._clear_template3).pack(side="left", padx=(4, 0))
 
         def _nfsize3b(p):
             self._num_fsize3_spin = tk.Spinbox(
@@ -6567,8 +6640,16 @@ class GuideMarkWizard(tk.Toplevel):
     def _render_tile(self, n: int, tw: int, th: int, dpi: int):
         from PIL import Image as _I, ImageDraw as _D, ImageFont as _F
 
+        s    = str(n)
+        is3  = len(s) >= 3
+
         path = (self._selected_tpl.get("path", "")
                 if self._selected_tpl else "")
+        # 3-digit cards can have their own background override
+        if is3 and self._selected_tpl3:
+            path3 = self._selected_tpl3.get("path", "")
+            if path3 and os.path.isfile(path3):
+                path = path3
         if path and os.path.isfile(path):
             tile = _I.open(path).convert("RGB").resize((tw, th), _I.LANCZOS)
         else:
