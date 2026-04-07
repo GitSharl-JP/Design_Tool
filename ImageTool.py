@@ -5426,6 +5426,8 @@ class GuideMarkWizard(tk.Toplevel):
 
     def _apply_preset(self, d: dict):
         def _s(var, key): var.set(d[key]) if key in d else None
+        if "name" in d:
+            self._preset_name.set(d["name"])
         _s(self._num_range_str, "num_range")
         _s(self._tile_w,        "tile_w")
         _s(self._tile_h,        "tile_h")
@@ -5446,12 +5448,13 @@ class GuideMarkWizard(tk.Toplevel):
         _s(self._cut_line_show, "cut_line_show")
         _s(self._cut_line_pt,   "cut_line_pt")
         tp = d.get("template_path", "")
-        if tp:
-            match = next((t for t in self._templates
-                          if t.get("path") == tp), None)
-            if match:
-                self._selected_tpl = match
-                self._refresh_cards()
+        if tp and os.path.isfile(tp):
+            self._selected_tpl = {
+                "path": tp,
+                "name": os.path.splitext(os.path.basename(tp))[0]
+            }
+        self._refresh_cards()
+        self._update_step1_template_display()
         self._toggle_num_spin()
 
     def _save_preset_as(self):
@@ -5557,7 +5560,7 @@ class GuideMarkWizard(tk.Toplevel):
         f.columnconfigure(0, weight=1)
         f.rowconfigure(1, weight=1)
 
-        tk.Label(f, text=_t("gmw.pick_design"), bg=BG, fg=FG,
+        tk.Label(f, text="Choose a preset", bg=BG, fg=FG,
                  font=("Segoe UI", 14, "bold")).grid(
                      row=0, column=0, pady=(28, 14))
 
@@ -5585,9 +5588,9 @@ class GuideMarkWizard(tk.Toplevel):
         for w in self._cards_inner.winfo_children():
             w.destroy()
         self._thumb_cache.clear()
-        for i, tpl in enumerate(self._templates):
-            self._make_card(tpl)
-        # "+" add card
+        for preset in self._presets:
+            self._make_card(preset)
+        # "+" new-preset card
         add = tk.Frame(self._cards_inner, bg=BG3, cursor="hand2",
                        highlightthickness=3, highlightbackground=BG3)
         add.pack(side="left", padx=14, pady=14)
@@ -5597,18 +5600,17 @@ class GuideMarkWizard(tk.Toplevel):
         plus_lbl = tk.Label(inner, text="+", bg=BG3, fg=FG2,
                              font=("Segoe UI", 52))
         plus_lbl.place(relx=0.5, rely=0.42, anchor="center")
-        hint_lbl = tk.Label(inner, text="Add template", bg=BG3, fg=FG2,
+        hint_lbl = tk.Label(inner, text="New preset", bg=BG3, fg=FG2,
                              font=FONT_SM)
         hint_lbl.place(relx=0.5, rely=0.75, anchor="center")
         for w in (add, inner, plus_lbl, hint_lbl):
-            w.bind("<Button-1>", lambda e: self._add_template())
+            w.bind("<Button-1>", lambda e: self._new_preset())
 
-    def _make_card(self, tpl: dict):
+    def _make_card(self, preset: dict):
         from PIL import Image as _I, ImageTk as _ITk
-        path = tpl.get("path", "")
-        name = tpl.get("name", os.path.basename(path))
-        selected = bool(self._selected_tpl and
-                        self._selected_tpl.get("path") == path)
+        path = preset.get("template_path", "")
+        name = preset.get("name", "Unnamed")
+        selected = (name == self._preset_name.get())
 
         card = tk.Frame(self._cards_inner, bg=BG3, cursor="hand2",
                         highlightthickness=3,
@@ -5641,46 +5643,66 @@ class GuideMarkWizard(tk.Toplevel):
                            font=("Segoe UI", 7), cursor="hand2")
         del_lbl.pack(pady=(0, 8))
 
-        def _select(t=tpl):
-            self._selected_tpl = t
-            self._refresh_cards()
-            self._schedule_tile_preview()
+        def _select(p=preset):
+            self._apply_preset(p)
 
-        def _remove(t=tpl):
-            if t in self._templates:
-                self._templates.remove(t)
-                self._save_templates()
-                if self._selected_tpl.get("path") == t.get("path"):
-                    self._selected_tpl = (self._templates[0]
-                                          if self._templates else {})
-                self._refresh_cards()
+        def _remove(p=preset):
+            self._presets = [x for x in self._presets
+                             if x.get("name") != p.get("name")]
+            self._save_presets()
+            if self._preset_name.get() == p.get("name"):
+                self._preset_name.set("")
+                self._selected_tpl = {}
+            self._refresh_cards()
+            if hasattr(self, "_preset_cb"):
+                self._preset_cb["values"] = [p["name"] for p in self._presets]
 
         for w in (card, tc, name_lbl):
             w.bind("<Button-1>", lambda e, fn=_select: fn())
         del_lbl.bind("<Button-1>", lambda e, fn=_remove: fn())
 
-    def _add_template(self):
-        paths = filedialog.askopenfilenames(
+    def _new_preset(self):
+        """Start fresh: clear preset/template, go directly to Configure."""
+        self._preset_name.set("")
+        self._selected_tpl = {}
+        self._update_step1_template_display()
+        self._show_step(1)
+
+    def _change_template(self):
+        """Pick a new template image from disk (used inside step 1)."""
+        path = filedialog.askopenfilename(
             parent=self,
-            title="Select template image(s)",
+            title="Select template image",
             filetypes=[("Images", "*.png *.jpg *.jpeg *.tif *.tiff *.bmp"),
                        ("All files", "*.*")])
-        if not paths:
+        if not path:
             return
-        added = False
-        for p in paths:
-            p = os.path.normpath(p)
-            if any(t["path"] == p for t in self._templates):
-                continue
-            name = os.path.splitext(os.path.basename(p))[0]
-            self._templates.append({"name": name, "path": p})
-            added = True
-        if added:
-            self._save_templates()
-            if not self._selected_tpl:
-                self._selected_tpl = self._templates[0]
-            self._refresh_cards()
-            self._schedule_tile_preview()
+        path = os.path.normpath(path)
+        name = os.path.splitext(os.path.basename(path))[0]
+        self._selected_tpl = {"path": path, "name": name}
+        self._update_step1_template_display()
+        self._schedule_tile_preview()
+
+    def _update_step1_template_display(self):
+        """Refresh the template thumbnail + label inside step 1."""
+        if not hasattr(self, "_step1_thumb_cv"):
+            return
+        path = self._selected_tpl.get("path", "")
+        name = self._selected_tpl.get("name", "")
+        self._step1_tpl_lbl.configure(text=name if name else "— no template —")
+        self._step1_thumb_cv.delete("all")
+        if path and os.path.isfile(path):
+            try:
+                from PIL import Image as _I, ImageTk as _ITk
+                img = _I.open(path).convert("RGB")
+                img.thumbnail((50, 50), _I.LANCZOS)
+                w_, h_ = img.size
+                thumb = _ITk.PhotoImage(img)
+                self._step1_thumb_ref = thumb
+                self._step1_thumb_cv.create_image(
+                    (50 - w_) // 2, (50 - h_) // 2, anchor="nw", image=thumb)
+            except Exception:
+                self._step1_thumb_cv.create_text(25, 25, text="?", fill=FG2)
 
     # ── Step 1 : Configure ────────────────────────────────────────────────
     def _build_step1(self):
@@ -5736,6 +5758,21 @@ class GuideMarkWizard(tk.Toplevel):
             ref[0] = b
             var.trace_add("write", lambda *_: (
                 b.configure(bg=var.get()) if b.winfo_exists() else None))
+
+        # ── Template ──────────────────────────────────────────────────
+        sec("━  Template")
+        tpl_row = tk.Frame(lp, bg=BG2)
+        tpl_row.pack(fill="x", padx=16, pady=4)
+        self._step1_thumb_cv = tk.Canvas(tpl_row, width=50, height=50,
+                                          bg="#f0f0f0", highlightthickness=0)
+        self._step1_thumb_cv.pack(side="left")
+        self._step1_tpl_lbl = tk.Label(tpl_row, text="— no template —",
+                                        bg=BG2, fg=FG2, font=FONT_SM,
+                                        wraplength=130, justify="left")
+        self._step1_tpl_lbl.pack(side="left", padx=6)
+        tk.Button(tpl_row, text="Change…", bg=BG3, fg=FG, relief="flat",
+                  font=FONT_SM, cursor="hand2",
+                  command=self._change_template).pack(side="left")
 
         # ── Preset ────────────────────────────────────────────────────
         sec("━  Preset")
@@ -6089,22 +6126,12 @@ class GuideMarkWizard(tk.Toplevel):
         else:
             self._btn_next.configure(text="", state="disabled", bg=BG2)
         if n == 1:
+            self._update_step1_template_display()
             self._schedule_tile_preview(300)
         elif n == 2:
             self._schedule_layout_preview(300)
 
     def _go_next(self):
-        if self._step == 0:
-            if not self._selected_tpl:
-                if self._templates:
-                    self._selected_tpl = self._templates[0]
-                    self._refresh_cards()
-                else:
-                    messagebox.showwarning(
-                        _t("gmw.title"),
-                        "Please add at least one template image first.",
-                        parent=self)
-                    return
         if self._step < 2:
             self._show_step(self._step + 1)
 
