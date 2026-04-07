@@ -5537,6 +5537,17 @@ class GuideMarkWizard(tk.Toplevel):
         self._build_step0()
         self._build_step1()
         self._build_step2()
+        # Propagate mousewheel to step-2 scroll canvas for all children
+        def _bind_step2_scroll(w):
+            try:
+                w.bind("<MouseWheel>",
+                       lambda e: self._lp_cv_ref.yview_scroll(
+                           int(-1*(e.delta/120)), "units"))
+            except Exception:
+                pass
+            for c in w.winfo_children():
+                _bind_step2_scroll(c)
+        self.after(200, lambda: _bind_step2_scroll(self._lp_cv_ref))
 
         # ── Bottom nav ────────────────────────────────────────────────────
         bot = tk.Frame(self, bg=BG2)
@@ -5961,9 +5972,32 @@ class GuideMarkWizard(tk.Toplevel):
         f.columnconfigure(1, weight=1)
         f.rowconfigure(0, weight=1)
 
-        lp = tk.Frame(f, bg=BG2, width=245)
-        lp.grid(row=0, column=0, sticky="nsew")
-        lp.grid_propagate(False)
+        # Scrollable left panel so all controls are reachable at any height
+        lp_outer = tk.Frame(f, bg=BG2, width=260)
+        lp_outer.grid(row=0, column=0, sticky="nsew")
+        lp_outer.grid_propagate(False)
+        lp_outer.rowconfigure(0, weight=1)
+        lp_outer.columnconfigure(0, weight=1)
+        _lp_cv = tk.Canvas(lp_outer, bg=BG2, highlightthickness=0,
+                            width=244)
+        self._lp_cv_ref = _lp_cv
+        _lp_sb = tk.Scrollbar(lp_outer, orient="vertical",
+                               command=_lp_cv.yview)
+        _lp_cv.configure(yscrollcommand=_lp_sb.set)
+        _lp_sb.grid(row=0, column=1, sticky="ns")
+        _lp_cv.grid(row=0, column=0, sticky="nsew")
+        lp = tk.Frame(_lp_cv, bg=BG2)
+        _lp_win = _lp_cv.create_window((0, 0), window=lp, anchor="nw")
+        def _lp_conf(e):
+            _lp_cv.configure(scrollregion=_lp_cv.bbox("all"))
+            _lp_cv.itemconfig(_lp_win, width=_lp_cv.winfo_width())
+        lp.bind("<Configure>", _lp_conf)
+        _lp_cv.bind("<Configure>",
+                    lambda e: _lp_cv.itemconfig(_lp_win, width=e.width))
+        def _lp_scroll(e):
+            _lp_cv.yview_scroll(int(-1 * (e.delta / 120)), "units")
+        for _w in (_lp_cv, lp):
+            _w.bind("<MouseWheel>", _lp_scroll)
 
         P = {"padx": 14, "pady": 4}
 
