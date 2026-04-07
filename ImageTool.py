@@ -5568,17 +5568,18 @@ class GuideMarkWizard(tk.Toplevel):
         self._build_step0()
         self._build_step1()
         self._build_step2()
-        # Propagate mousewheel to step-2 scroll canvas for all children
-        def _bind_step2_scroll(w):
+        # Propagate mousewheel to step-1 and step-2 scroll canvases for all children
+        def _bind_scroll(cv_ref, w):
             try:
                 w.bind("<MouseWheel>",
-                       lambda e: self._lp_cv_ref.yview_scroll(
+                       lambda e, cv=cv_ref: cv.yview_scroll(
                            int(-1*(e.delta/120)), "units"))
             except Exception:
                 pass
             for c in w.winfo_children():
-                _bind_step2_scroll(c)
-        self.after(200, lambda: _bind_step2_scroll(self._lp_cv_ref))
+                _bind_scroll(cv_ref, c)
+        self.after(200, lambda: _bind_scroll(self._lp1_cv_ref, self._lp1_cv_ref))
+        self.after(200, lambda: _bind_scroll(self._lp_cv_ref, self._lp_cv_ref))
 
         # ── Bottom nav ────────────────────────────────────────────────────
         bot = tk.Frame(self, bg=BG2)
@@ -5754,10 +5755,30 @@ class GuideMarkWizard(tk.Toplevel):
         f.columnconfigure(1, weight=1)
         f.rowconfigure(0, weight=1)
 
-        # Left panel
-        lp = tk.Frame(f, bg=BG2, width=310)
-        lp.grid(row=0, column=0, sticky="nsew")
-        lp.grid_propagate(False)
+        # Scrollable left panel
+        lp_outer = tk.Frame(f, bg=BG2, width=310)
+        lp_outer.grid(row=0, column=0, sticky="nsew")
+        lp_outer.grid_propagate(False)
+        lp_outer.rowconfigure(0, weight=1)
+        lp_outer.columnconfigure(0, weight=1)
+        _lp1_cv = tk.Canvas(lp_outer, bg=BG2, highlightthickness=0, width=294)
+        self._lp1_cv_ref = _lp1_cv
+        _lp1_sb = tk.Scrollbar(lp_outer, orient="vertical", command=_lp1_cv.yview)
+        _lp1_cv.configure(yscrollcommand=_lp1_sb.set)
+        _lp1_sb.grid(row=0, column=1, sticky="ns")
+        _lp1_cv.grid(row=0, column=0, sticky="nsew")
+        lp = tk.Frame(_lp1_cv, bg=BG2)
+        _lp1_win = _lp1_cv.create_window((0, 0), window=lp, anchor="nw")
+        def _lp1_conf(e):
+            _lp1_cv.configure(scrollregion=_lp1_cv.bbox("all"))
+            _lp1_cv.itemconfig(_lp1_win, width=_lp1_cv.winfo_width())
+        lp.bind("<Configure>", _lp1_conf)
+        _lp1_cv.bind("<Configure>",
+                     lambda e: _lp1_cv.itemconfig(_lp1_win, width=e.width))
+        def _lp1_scroll(e):
+            _lp1_cv.yview_scroll(int(-1 * (e.delta / 120)), "units")
+        for _w in (_lp1_cv, lp):
+            _w.bind("<MouseWheel>", _lp1_scroll)
 
         def sec(txt):
             tk.Label(lp, text=txt, bg=BG2, fg=FG2,
