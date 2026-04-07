@@ -3,7 +3,7 @@
 #  Python 3 + tkinter + Pillow
 # =============================================================================
 
-import os, re, sys, shutil, threading, struct, zlib, json
+import os, re, sys, shutil, threading, struct, zlib, json, subprocess
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 from pathlib import Path
@@ -224,7 +224,7 @@ _STRINGS: dict = {
         "fpd.cancel":     "✕  Cancel",
         # HomeScreen
         "home.sub":       "Professional image workflow suite  ·  v2.0",
-        "home.pills":     ["5 tools", "Batch", "Live preview", "100% local"],
+        "home.pills":     ["7 tools", "Batch", "Live preview", "100% local"],
         "home.tools":     "TOOLS",
         "home.adv":       "ADVANCED",
         "home.pipeline":  "▶  Pipeline",
@@ -273,6 +273,55 @@ _STRINGS: dict = {
         "conv.done":      "{ok}/{total} file(s) converted.",
         "conv.overwrite": "Overwrite originals",
         "conv.out_sub":   "Save in sub-folder : converted/",
+        # GuideMarkWizard
+        "gmw.title":      "Guide Mark Generator",
+        "gmw.desc":       "Arrange numbered images for print — A3ノビ, A3, A4",
+        "gmw.nums":       "Number range :",
+        "gmw.folder":     "Source folder :",
+        "gmw.prefix":     "Prefix :",
+        "gmw.suffix":     "Suffix :",
+        "gmw.ext":        "Extension :",
+        "gmw.paper":      "Paper size :",
+        "gmw.orient":     "Orientation :",
+        "gmw.portrait":   "Portrait",
+        "gmw.landscape":  "Landscape",
+        "gmw.tile_w":     "Tile width (mm) :",
+        "gmw.tile_h":     "Tile height (mm) :",
+        "gmw.margin":     "Page margin (mm) :",
+        "gmw.gap":        "Spacing (mm) :",
+        "gmw.dpi":        "Resolution (DPI) :",
+        "gmw.out_folder": "Output folder :",
+        "gmw.printers":   "Printer :",
+        "gmw.preview":    "Layout preview",
+        "gmw.export_png": "💾  Export PNG",
+        "gmw.export_pdf": "📄  Export PDF  (.ai compatible)",
+        "gmw.print":      "🖨  Print…",
+        "gmw.layout_sum": "{placed}/{total} tiles placed  ·  grid {cols}×{rows}",
+        "gmw.no_src":     "Please select a source folder first.",
+        "gmw.done_png":   "PNG exported : {path}",
+        "gmw.done_pdf":   "PDF exported : {path}",
+        "gmw.src_mode":     "Source :",
+        "gmw.src_folder":   "📁  From folder",
+        "gmw.src_render":   "🎨  Generate tiles",
+        "gmw.design":       "Design :",
+        "gmw.des_num":      "Number only",
+        "gmw.des_num_text": "Number + sub-text",
+        "gmw.tile_bg":      "Tile background :",
+        "gmw.overlay":      "Overlay image :",
+        "gmw.num_font":     "Number font :",
+        "gmw.num_fsize":    "Number size (pt) :",
+        "gmw.num_auto":     "Auto-scale to tile",
+        "gmw.num_color":    "Number colour :",
+        "gmw.sub_font":     "Sub-text font :",
+        "gmw.sub_fsize":    "Sub-text size (pt) :",
+        "gmw.sub_tracking": "Tracking (px) :",
+        "gmw.sub_color":    "Sub-text colour :",
+        "gmw.design_preset":  "Design :",
+        "gmw.show_subtext":   "Show sub-text",
+        "gmw.monochrome":     "Monochrome (K only)",
+        "gmw.tile_size":      "Tile size :",
+        "gmw.sub_text":       "Sub-text :",
+        "home.gmw_d":     "Arrange numbered images for print — auto-layout, PDF/PNG export",
     },
     "ja": {
         # ImageGenWizard
@@ -394,7 +443,7 @@ _STRINGS: dict = {
         "fpd.cancel":     "✕  キャンセル",
         # HomeScreen
         "home.sub":       "プロ向け画像ワークフロースイート  ·  v2.0",
-        "home.pills":     ["5 ツール", "バッチ", "ライブプレビュー", "100% ローカル"],
+        "home.pills":     ["7 ツール", "バッチ", "ライブプレビュー", "100% ローカル"],
         "home.tools":     "ツール",
         "home.adv":       "上級",
         "home.pipeline":  "▶  パイプライン",
@@ -443,6 +492,55 @@ _STRINGS: dict = {
         "conv.done":      "{ok}/{total} ファイル変換完了。",
         "conv.overwrite": "元ファイルを上書き",
         "conv.out_sub":   "サブフォルダに保存 : converted/",
+        # GuideMarkWizard
+        "gmw.title":      "ガイドマーク生成",
+        "gmw.desc":       "番号画像を印刷用に自動配置 — A3ノビ, A3, A4",
+        "gmw.nums":       "番号範囲 :",
+        "gmw.folder":     "ソースフォルダ :",
+        "gmw.prefix":     "プレフィックス :",
+        "gmw.suffix":     "サフィックス :",
+        "gmw.ext":        "拡張子 :",
+        "gmw.paper":      "用紙サイズ :",
+        "gmw.orient":     "向き :",
+        "gmw.portrait":   "縦",
+        "gmw.landscape":  "横",
+        "gmw.tile_w":     "タイル幅 (mm) :",
+        "gmw.tile_h":     "タイル高さ (mm) :",
+        "gmw.margin":     "ページ余白 (mm) :",
+        "gmw.gap":        "間隔 (mm) :",
+        "gmw.dpi":        "解像度 (DPI) :",
+        "gmw.out_folder": "出力フォルダ :",
+        "gmw.printers":   "プリンター :",
+        "gmw.preview":    "レイアウトプレビュー",
+        "gmw.export_png": "💾  PNG エクスポート",
+        "gmw.export_pdf": "📄  PDF エクスポート  (.ai 互換)",
+        "gmw.print":      "🖨  印刷…",
+        "gmw.layout_sum": "{placed}/{total} タイル配置  ·  グリッド {cols}×{rows}",
+        "gmw.no_src":     "先にソースフォルダを選択してください。",
+        "gmw.done_png":   "PNG エクスポート完了 : {path}",
+        "gmw.done_pdf":   "PDF エクスポート完了 : {path}",
+        "gmw.src_mode":     "ソース :",
+        "gmw.src_folder":   "📁  フォルダから",
+        "gmw.src_render":   "🎨  タイルを生成",
+        "gmw.design":       "デザイン :",
+        "gmw.des_num":      "数字のみ",
+        "gmw.des_num_text": "数字 + テキスト",
+        "gmw.tile_bg":      "タイル背景 :",
+        "gmw.overlay":      "オーバーレイ画像 :",
+        "gmw.num_font":     "数字フォント :",
+        "gmw.num_fsize":    "数字サイズ (pt) :",
+        "gmw.num_auto":     "タイルに合わせて自動調整",
+        "gmw.num_color":    "数字の色 :",
+        "gmw.sub_font":     "サブテキストフォント :",
+        "gmw.sub_fsize":    "サブテキストサイズ (pt) :",
+        "gmw.sub_tracking": "トラッキング (px) :",
+        "gmw.sub_color":    "サブテキストの色 :",
+        "gmw.design_preset":  "デザイン :",
+        "gmw.show_subtext":   "サブテキストを表示",
+        "gmw.monochrome":     "モノクロ (K のみ)",
+        "gmw.tile_size":      "タイルサイズ :",
+        "gmw.sub_text":       "サブテキスト :",
+        "home.gmw_d":     "番号画像を印刷用に自動配置 — PDF/PNG エクスポート",
     },
 }
 
@@ -2306,8 +2404,9 @@ class ColorPickerDialog(tk.Toplevel):
 # =============================================================================
 #  IMAGE GENERATOR  —  numbered image batch creator
 # =============================================================================
-_FONTS_DIR = Path("C:/Windows/Fonts")
+_FONTS_DIR      = Path("C:/Windows/Fonts")
 _FONTS_DIR_USER = Path(os.path.expanduser("~")) / "AppData" / "Local" / "Microsoft" / "Windows" / "Fonts"
+_FONT_CACHE_FILE = Path(os.path.abspath(__file__)).parent / "_font_cache.json"
 
 
 def _read_font_name(path: str):
@@ -2403,15 +2502,40 @@ def _discover_font_families() -> dict:
 
 def _get_font_families() -> dict:
     global _FONT_FAMILIES, _INSTALLED_FONTS
-    if not _FONT_FAMILIES:
-        _FONT_FAMILIES = _discover_font_families() or {"Default": {"Regular": ""}}
-        flat = {}
-        for fam, styles in _FONT_FAMILIES.items():
-            for sty, path in sorted(styles.items()):
-                key = fam if sty == 'Regular' else f"{fam} {sty}"
-                if key not in flat:
-                    flat[key] = path
-        _INSTALLED_FONTS = dict(sorted(flat.items()))
+    if _FONT_FAMILIES:
+        return _FONT_FAMILIES
+    # ── Try cache first ───────────────────────────────────────────────────────
+    if _FONT_CACHE_FILE.exists():
+        try:
+            cache_mtime = _FONT_CACHE_FILE.stat().st_mtime
+            dirs_ok = all(
+                not d.exists() or d.stat().st_mtime <= cache_mtime
+                for d in [_FONTS_DIR, _FONTS_DIR_USER]
+            )
+            if dirs_ok:
+                with open(_FONT_CACHE_FILE, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                _FONT_FAMILIES  = data["families"]
+                _INSTALLED_FONTS = data["flat"]
+                return _FONT_FAMILIES
+        except Exception:
+            pass
+    # ── Rebuild from disk ─────────────────────────────────────────────────────
+    _FONT_FAMILIES = _discover_font_families() or {"Default": {"Regular": ""}}
+    flat = {}
+    for fam, styles in _FONT_FAMILIES.items():
+        for sty, path in sorted(styles.items()):
+            key = fam if sty == 'Regular' else f"{fam} {sty}"
+            if key not in flat:
+                flat[key] = path
+    _INSTALLED_FONTS = dict(sorted(flat.items()))
+    # ── Save cache ────────────────────────────────────────────────────────────
+    try:
+        with open(_FONT_CACHE_FILE, "w", encoding="utf-8") as f:
+            json.dump({"families": _FONT_FAMILIES, "flat": _INSTALLED_FONTS},
+                      f, ensure_ascii=False)
+    except Exception:
+        pass
     return _FONT_FAMILIES
 
 
@@ -3116,105 +3240,95 @@ class ImageGenWizard(tk.Toplevel):
 
     def _analyse_ref_image(self):
         """Load a reference image and extract canvas size, text colour,
-        approximate font size, position, and drop-shadow into the wizard."""
+        approximate font size, position, and drop-shadow into the wizard.
+        Uses PIL-native operations (no pixel loops) for speed."""
         path = filedialog.askopenfilename(
             parent=self, title=_t("anal.dlg"),
             filetypes=[("Images", "*.jpg *.jpeg *.png *.bmp *.webp"), ("Tous", "*.*")])
         if not path:
             return
         try:
-            from PIL import Image as _Img
-            img = _Img.open(path).convert("RGBA")
+            from PIL import Image as _Img, ImageFilter as _IFlt
+            img_rgb = _Img.open(path).convert("RGB")
         except Exception as e:
             messagebox.showerror("Error", str(e), parent=self)
             return
 
-        W, H = img.size
-        # Set canvas size from the image
+        W, H = img_rgb.size
         self._link_wh.set(False)
         self._w_var.set(str(W))
         self._h_var.set(str(H))
 
-        # Sample background from the 10-px border (corners + edges)
-        rgb_img = img.convert("RGB")
-        border_pix = []
-        bw = min(10, W // 4)
-        bh = min(10, H // 4)
-        for x in range(W):
-            for y in range(bh):
-                border_pix.append(rgb_img.getpixel((x, y)))
-            for y in range(H - bh, H):
-                border_pix.append(rgb_img.getpixel((x, y)))
-        for y in range(H):
-            for x in range(bw):
-                border_pix.append(rgb_img.getpixel((x, y)))
-            for x in range(W - bw, W):
-                border_pix.append(rgb_img.getpixel((x, y)))
-        bg_r = round(sum(c[0] for c in border_pix) / len(border_pix))
-        bg_g = round(sum(c[1] for c in border_pix) / len(border_pix))
-        bg_b = round(sum(c[2] for c in border_pix) / len(border_pix))
+        # ── Background colour: dominant colour in a 5% corner crop ──────────
+        border = max(4, int(min(W, H) * 0.05))
+        corner = img_rgb.crop((0, 0, border, border))
+        corner_colors = corner.getcolors(maxcolors=border * border * 4)
+        if corner_colors:
+            bg_r, bg_g, bg_b = max(corner_colors, key=lambda x: x[0])[1]
+        else:
+            bg_r, bg_g, bg_b = 255, 255, 255
+        bg_gray = int(0.299 * bg_r + 0.587 * bg_g + 0.114 * bg_b)
+        dark_bg = bg_gray <= 128          # True → light text on dark bg
 
-        # Find pixels that differ significantly from background
-        THRESH = 35
-        text_pix, dark_pix = [], []
-        data = list(rgb_img.getdata())
-        bg_brightness = (bg_r + bg_g + bg_b) / 3
-        for i, (r, g, b) in enumerate(data):
-            dist = ((r-bg_r)**2 + (g-bg_g)**2 + (b-bg_b)**2) ** 0.5
-            if dist < THRESH:
-                continue
-            x, y = i % W, i // W
-            brightness = (r + g + b) / 3
-            if brightness >= bg_brightness:
-                text_pix.append((x, y, r, g, b))
-            else:
-                dark_pix.append((x, y, r, g, b))
+        # ── Binary mask: find non-background pixels via point() — no loops ──
+        gray = img_rgb.convert("L")
+        THRESH = 40
+        if dark_bg:
+            mask = gray.point(lambda p: 255 if p > bg_gray + THRESH else 0)
+        else:
+            mask = gray.point(lambda p: 255 if p < bg_gray - THRESH else 0)
 
-        all_pix = text_pix + dark_pix
-        if not all_pix:
+        # Denoise (removes single-pixel noise)
+        mask = mask.filter(_IFlt.MaxFilter(3)).filter(_IFlt.MinFilter(3))
+
+        bbox = mask.getbbox()             # (left, top, right, bottom) | None
+        if not bbox:
             messagebox.showinfo(_t("anal.title"), _t("anal.none"), parent=self)
             return
 
-        # Bounding box → position + font size estimate
-        xs = [p[0] for p in all_pix]
-        ys = [p[1] for p in all_pix]
-        cx = (min(xs) + max(xs)) // 2
-        cy = (min(ys) + max(ys)) // 2
-        bbox_h = max(ys) - min(ys)
-        font_est = max(8, int(bbox_h * 0.82))
+        left, top, right, bottom = bbox
+        cx = (left + right) // 2
+        cy = (top + bottom) // 2
+        font_est = max(8, round((bottom - top) * 0.80))
 
-        # Dominant text colour (from bright pixels)
-        src = text_pix if text_pix else all_pix
-        color_counts: dict = {}
-        for _, _, r, g, b in src:
-            key = (r >> 4 << 4, g >> 4 << 4, b >> 4 << 4)
-            color_counts[key] = color_counts.get(key, 0) + 1
-        dom = max(color_counts, key=color_counts.get)
-        bucket = [(r, g, b) for _, _, r, g, b in src
-                  if (r >> 4, g >> 4, b >> 4) == (dom[0] >> 4, dom[1] >> 4, dom[2] >> 4)]
-        ar = round(sum(p[0] for p in bucket) / len(bucket))
-        ag = round(sum(p[1] for p in bucket) / len(bucket))
-        ab = round(sum(p[2] for p in bucket) / len(bucket))
-        text_color = f"#{ar:02x}{ag:02x}{ab:02x}"
+        # ── Dominant text colour from the bounding-box crop ─────────────────
+        crop = img_rgb.crop((left, top, right, bottom))
+        crop_colors = crop.getcolors(maxcolors=W * H)
+        text_color = "#ffffff" if dark_bg else "#000000"
+        if crop_colors:
+            non_bg = [
+                (cnt, (r, g, b)) for cnt, (r, g, b) in crop_colors
+                if abs(r - bg_r) + abs(g - bg_g) + abs(b - bg_b) > 50
+            ]
+            if non_bg:
+                r, g, b = max(non_bg, key=lambda x: x[0])[1]
+                text_color = f"#{r:02x}{g:02x}{b:02x}"
 
-        # Shadow detection: dark pixels offset from text centroid
+        # ── Shadow detection: look for a dark cluster offset from main bbox ─
         shadow_on, sh_ox, sh_oy, sh_col = False, 4, 4, "#000000"
-        if dark_pix and len(dark_pix) > 20:
-            tx_cx = sum(p[0] for p in all_pix) / len(all_pix)
-            tx_cy = sum(p[1] for p in all_pix) / len(all_pix)
-            dk_cx = sum(p[0] for p in dark_pix) / len(dark_pix)
-            dk_cy = sum(p[1] for p in dark_pix) / len(dark_pix)
-            off_x = round(dk_cx - tx_cx)
-            off_y = round(dk_cy - tx_cy)
-            if abs(off_x) >= 2 or abs(off_y) >= 2:
-                shadow_on = True
-                sh_ox, sh_oy = off_x, off_y
-                sr = round(sum(p[2] for p in dark_pix) / len(dark_pix))
-                sg = round(sum(p[3] for p in dark_pix) / len(dark_pix))
-                sb_ = round(sum(p[4] for p in dark_pix) / len(dark_pix))
-                sh_col = f"#{sr:02x}{sg:02x}{sb_:02x}"
+        if dark_bg:
+            # On dark backgrounds the "shadow" would be darker than the bg —
+            # skip (shadows rarely visible on dark canvas)
+            pass
+        else:
+            # Light bg: shadow pixels are darker than bg, separate from text
+            shadow_mask = gray.point(lambda p: 255 if p < bg_gray - THRESH - 20 else 0)
+            shadow_mask = shadow_mask.filter(_IFlt.MaxFilter(3)).filter(_IFlt.MinFilter(3))
+            sbbox = shadow_mask.getbbox()
+            if sbbox:
+                sc_x = (sbbox[0] + sbbox[2]) // 2
+                sc_y = (sbbox[1] + sbbox[3]) // 2
+                off_x, off_y = sc_x - cx, sc_y - cy
+                if abs(off_x) >= 2 or abs(off_y) >= 2:
+                    shadow_on = True
+                    sh_ox, sh_oy = off_x, off_y
+                    scrop = img_rgb.crop((sbbox[0], sbbox[1], sbbox[2], sbbox[3]))
+                    sc_cols = scrop.getcolors(maxcolors=W * H)
+                    if sc_cols:
+                        sr, sg, sb_ = max(sc_cols, key=lambda x: x[0])[1]
+                        sh_col = f"#{sr:02x}{sg:02x}{sb_:02x}"
 
-        # Apply extracted values to wizard
+        # ── Apply to wizard ──────────────────────────────────────────────────
         self._pos_manual.set(True)
         self._pos_x.set(str(cx))
         self._pos_y.set(str(cy))
@@ -5088,6 +5202,917 @@ class ConvertWizard(tk.Toplevel):
 
 
 # =============================================================================
+#  GUIDE MARK WIZARD
+# =============================================================================
+class GuideMarkWizard(tk.Toplevel):
+    """Design-preset based number-panel layout tool.
+
+    Workflow:
+      1. Pick a named design from the dropdown  →  all settings prefilled
+      2. Tweak: tile size, number/text font & size, show/hide sub-text,
+         mono toggle, colours
+      3. Preview live, then Export PNG / PDF or Print
+
+    Built-in designs render entirely in PIL (no external files needed).
+    Overlay images are optional per-design.
+    """
+
+    PAPER_MM = {
+        "A3ノビ  (483×329 mm)": (483, 329),
+        "A3  (420×297 mm)":     (420, 297),
+        "A4  (297×210 mm)":     (297, 210),
+    }
+
+    # ── Design catalogue ─────────────────────────────────────────────────────
+    # Each entry: display name → dict of default settings.
+    # The renderer inspects _design_id to draw design-specific graphics.
+    DESIGNS = {
+        "Acoustiguide — Number + Text": {
+            "design_id":     "acoustiguide",
+            "tile_w":        100.0, "tile_h": 100.0,
+            "tile_bg":       "#ffffff",
+            "num_font_fam":  "Futura Std",  "num_font_sty": "Medium",
+            "num_fsize_pt":  120, "num_auto": True,
+            "num_color":     "#000000",
+            "show_sub":      True,
+            "sub_text":      "音声ガイド",
+            "sub_font_fam":  "小塚ゴシック Pr6N", "sub_font_sty": "R",
+            "sub_fsize_pt":  44, "sub_tracking": 50,
+            "sub_color":     "#000000",
+            "headphones":    True,   # draw vector headphones arc
+            "hp_color":      "#727171",
+        },
+        "Acoustiguide — Number only": {
+            "design_id":     "acoustiguide",
+            "tile_w":        100.0, "tile_h": 100.0,
+            "tile_bg":       "#ffffff",
+            "num_font_fam":  "Futura Std",  "num_font_sty": "Medium",
+            "num_fsize_pt":  120, "num_auto": True,
+            "num_color":     "#000000",
+            "show_sub":      False,
+            "sub_text":      "音声ガイド",
+            "sub_font_fam":  "小塚ゴシック Pr6N", "sub_font_sty": "R",
+            "sub_fsize_pt":  44, "sub_tracking": 50,
+            "sub_color":     "#000000",
+            "headphones":    True,
+            "hp_color":      "#727171",
+        },
+        "— Custom (from folder) —": {
+            "design_id":     "folder",
+            "tile_w":        100.0, "tile_h": 100.0,
+            "tile_bg":       "#ffffff",
+            "num_font_fam":  "", "num_font_sty": "",
+            "num_fsize_pt":  80, "num_auto": False,
+            "num_color":     "#000000",
+            "show_sub":      False,
+            "sub_text":      "",
+            "sub_font_fam":  "", "sub_font_sty": "",
+            "sub_fsize_pt":  30, "sub_tracking": 0,
+            "sub_color":     "#000000",
+            "headphones":    False,
+            "hp_color":      "#727171",
+        },
+    }
+    _DESIGN_NAMES = list(DESIGNS.keys())
+
+    def __init__(self, master):
+        super().__init__(master)
+        self.title(_t("gmw.title"))
+        self.configure(bg=BG)
+        self.geometry("1180x760")
+        self.minsize(920, 600)
+        self.resizable(True, True)
+
+        # ── Layout vars ──────────────────────────────────────────────────────
+        self._num_from   = tk.IntVar(value=1)
+        self._num_to     = tk.IntVar(value=15)
+        self._paper      = tk.StringVar(value=list(self.PAPER_MM)[0])
+        self._orient     = tk.StringVar(value="landscape")
+        self._tile_w     = tk.DoubleVar(value=100.0)
+        self._tile_h     = tk.DoubleVar(value=100.0)
+        self._margin     = tk.DoubleVar(value=10.0)
+        self._gap        = tk.DoubleVar(value=5.0)
+        self._dpi        = tk.IntVar(value=300)
+        self._out_folder = tk.StringVar()
+        self._printer    = tk.StringVar(value="")
+        self._printers: list = []
+        self._monochrome = tk.BooleanVar(value=True)
+
+        # ── Design selector ──────────────────────────────────────────────────
+        self._design_name = tk.StringVar(value=self._DESIGN_NAMES[0])
+
+        # ── Folder-mode (for "Custom" design) ────────────────────────────────
+        self._folder = tk.StringVar()
+        self._prefix = tk.StringVar(value="")
+        self._suffix = tk.StringVar(value="")
+        self._ext    = tk.StringVar(value=".png")
+
+        # ── Per-design tweakable vars ─────────────────────────────────────────
+        self._tile_bg       = tk.StringVar(value="#ffffff")
+        self._num_font_fam  = tk.StringVar(value="Futura Std")
+        self._num_font_sty  = tk.StringVar(value="Medium")
+        self._num_auto      = tk.BooleanVar(value=True)
+        self._num_fsize_pt  = tk.IntVar(value=120)
+        self._num_color     = tk.StringVar(value="#000000")
+        self._show_sub      = tk.BooleanVar(value=True)
+        self._sub_text      = tk.StringVar(value="音声ガイド")
+        self._sub_font_fam  = tk.StringVar(value="小塚ゴシック Pr6N")
+        self._sub_font_sty  = tk.StringVar(value="R")
+        self._sub_fsize_pt  = tk.IntVar(value=44)
+        self._sub_tracking  = tk.IntVar(value=50)
+        self._sub_color     = tk.StringVar(value="#000000")
+        self._hp_color      = tk.StringVar(value="#727171")
+        self._show_hp       = tk.BooleanVar(value=True)
+
+        # ── Preview state ────────────────────────────────────────────────────
+        self._preview_img = None
+        self._preview_tk  = None
+        self._sched_id    = None
+        self._layout_info = tk.StringVar(value="—")
+
+        self._build()
+        self._load_printers_async()
+        self._apply_design(self._DESIGN_NAMES[0])  # prime UI from first design
+
+        # Design selector → full preset reload + preview
+        self._design_name.trace_add("write", lambda *_: self._on_design_change())
+
+        # All other tweakable vars → live preview
+        for v in (
+            self._num_from, self._num_to, self._paper, self._orient,
+            self._tile_w, self._tile_h, self._margin, self._gap, self._dpi,
+            self._monochrome,
+            self._folder, self._prefix, self._suffix, self._ext,
+            self._tile_bg,
+            self._num_font_fam, self._num_font_sty, self._num_auto,
+            self._num_fsize_pt, self._num_color,
+            self._show_sub, self._sub_text, self._sub_font_fam,
+            self._sub_font_sty, self._sub_fsize_pt, self._sub_tracking,
+            self._sub_color, self._hp_color, self._show_hp,
+        ):
+            v.trace_add("write", lambda *_: self._schedule_preview())
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # UI
+    # ─────────────────────────────────────────────────────────────────────────
+    def _build(self):
+        self.columnconfigure(0, weight=0)
+        self.columnconfigure(1, weight=1)
+        self.rowconfigure(0, weight=1)
+
+        # ── Left scrollable panel ────────────────────────────────────────────
+        left = tk.Frame(self, bg=BG2, width=390)
+        left.grid(row=0, column=0, sticky="nsew")
+        left.grid_propagate(False)
+
+        _sc = tk.Canvas(left, bg=BG2, highlightthickness=0, bd=0)
+        _sb = tk.Scrollbar(left, orient="vertical", command=_sc.yview)
+        _sc.configure(yscrollcommand=_sb.set)
+        _sb.pack(side="right", fill="y")
+        _sc.pack(side="left", fill="both", expand=True)
+        inner = tk.Frame(_sc, bg=BG2)
+        _win = _sc.create_window((0, 0), window=inner, anchor="nw")
+        inner.bind("<Configure>", lambda e: (
+            _sc.configure(scrollregion=_sc.bbox("all")),
+            _sc.itemconfig(_win, width=_sc.winfo_width())))
+        _sc.bind("<Configure>", lambda e: _sc.itemconfig(_win, width=e.width))
+        inner.bind("<MouseWheel>",
+                   lambda e: _sc.yview_scroll(-1 * (e.delta // 120), "units"))
+
+        P = {"padx": 14, "pady": 3}
+
+        def _hdr(txt, parent=None):
+            tk.Label(parent or inner, text=txt, bg=BG2, fg=FG2,
+                     font=("Segoe UI", 8, "bold")).pack(
+                         anchor="w", padx=14, pady=(10, 2))
+
+        def _row(lbl, fn, parent=None, lw=22):
+            p = parent or inner
+            r = tk.Frame(p, bg=BG2)
+            r.pack(fill="x", **P)
+            tk.Label(r, text=lbl, bg=BG2, fg=FG, font=FONT_SM,
+                     width=lw, anchor="e").pack(side="left", padx=(0, 6))
+            fn(r)
+
+        def _spin(parent, var, from_, to_, inc=1, fmt=None, width=7):
+            kw = {"format": fmt} if fmt else {}
+            tk.Spinbox(parent, textvariable=var, from_=from_, to=to_,
+                       increment=inc, width=width,
+                       bg=BG3, fg=FG, insertbackground=FG, relief="flat",
+                       buttonbackground=BG3, **kw).pack(side="left")
+
+        def _spin_mm(parent, var):
+            _spin(parent, var, 1, 500, inc=0.5, fmt="%.1f", width=7)
+            tk.Label(parent, text="mm", bg=BG2, fg=FG2,
+                     font=FONT_SM).pack(side="left", padx=2)
+
+        def _entry(parent, var, width=18):
+            tk.Entry(parent, textvariable=var, bg=BG3, fg=FG,
+                     insertbackground=FG, relief="flat",
+                     width=width).pack(side="left", fill="x", expand=True)
+
+        def _folder_btn(parent, cmd):
+            tk.Button(parent, text="📂", bg=BG3, fg=FG, relief="flat",
+                      cursor="hand2", command=cmd).pack(side="left", padx=(4, 0))
+
+        def _swatch(parent, var):
+            ref = [None]
+            def _pick():
+                try:
+                    ColorPickerDialog(
+                        parent=self, init_color=var.get(),
+                        callback=lambda c: (var.set(c),
+                            ref[0].configure(bg=c) if ref[0] else None))
+                except Exception:
+                    pass
+            b = tk.Button(parent, bg=var.get(), width=2, relief="flat",
+                          cursor="hand2", command=_pick)
+            b.pack(side="left", padx=(4, 0))
+            ref[0] = b
+            var.trace_add("write", lambda *_: (
+                b.configure(bg=var.get()) if b.winfo_exists() else None))
+
+        def _font_row(lbl, fam_var, sty_var, parent=None):
+            r = tk.Frame(parent or inner, bg=BG2)
+            r.pack(fill="x", **P)
+            tk.Label(r, text=lbl, bg=BG2, fg=FG, font=FONT_SM,
+                     width=22, anchor="e").pack(side="left", padx=(0, 6))
+            tk.Entry(r, textvariable=fam_var, bg=BG3, fg=FG,
+                     insertbackground=FG, relief="flat",
+                     width=14).pack(side="left", fill="x", expand=True)
+            tk.Entry(r, textvariable=sty_var, bg=BG3, fg=FG,
+                     insertbackground=FG, relief="flat",
+                     width=8).pack(side="left", padx=(4, 0))
+
+        # ════════════════════════════════════════════════════════════════════
+        # A · Design selector
+        _hdr("━  " + _t("gmw.design_preset"))
+        def _des_w(p):
+            ttk.Combobox(p, textvariable=self._design_name,
+                         values=self._DESIGN_NAMES,
+                         state="readonly", width=30,
+                         style="Custom.TCombobox").pack(side="left")
+        _row(_t("gmw.design_preset"), _des_w)
+
+        # ── Folder section (only shown for "Custom") ────────────────────────
+        self._folder_sec = tk.Frame(inner, bg=BG2)
+        # (packed/forgotten by _on_design_change)
+        def _src_w(p):
+            _entry(p, self._folder)
+            _folder_btn(p, self._pick_folder)
+        def _row_fs(lbl, fn):
+            r = tk.Frame(self._folder_sec, bg=BG2)
+            r.pack(fill="x", **P)
+            tk.Label(r, text=lbl, bg=BG2, fg=FG, font=FONT_SM,
+                     width=22, anchor="e").pack(side="left", padx=(0, 6))
+            fn(r)
+        _row_fs(_t("gmw.folder"), _src_w)
+        _row_fs(_t("gmw.prefix"), lambda p: _entry(p, self._prefix))
+        _row_fs(_t("gmw.suffix"), lambda p: _entry(p, self._suffix))
+        _row_fs(_t("gmw.ext"),    lambda p: _entry(p, self._ext, 8))
+
+        # ════════════════════════════════════════════════════════════════════
+        # B · Tile appearance tweaks
+        _hdr("━  Tile")
+        def _tsize_w(p):
+            _spin_mm(p, self._tile_w)
+            tk.Label(p, text="×", bg=BG2, fg=FG2,
+                     font=FONT_SM).pack(side="left", padx=4)
+            _spin_mm(p, self._tile_h)
+        _row(_t("gmw.tile_size"), _tsize_w)
+
+        def _bg_w(p):
+            _entry(p, self._tile_bg, 9)
+            _swatch(p, self._tile_bg)
+        _row(_t("gmw.tile_bg"), _bg_w)
+
+        # ════════════════════════════════════════════════════════════════════
+        # C · Number
+        _hdr("━  Number")
+        _font_row(_t("gmw.num_font"), self._num_font_fam, self._num_font_sty)
+
+        def _nauto_w(p):
+            tk.Checkbutton(p, text=_t("gmw.num_auto"),
+                           variable=self._num_auto,
+                           bg=BG2, fg=FG, selectcolor=BG3,
+                           activebackground=BG2, font=FONT_SM,
+                           command=self._toggle_num_spin).pack(side="left")
+        _row("", _nauto_w)
+
+        def _nfsize_w(p):
+            self._num_fsize_spin = tk.Spinbox(
+                p, textvariable=self._num_fsize_pt, from_=6, to=999,
+                width=6, bg=BG3, fg=FG, insertbackground=FG, relief="flat",
+                buttonbackground=BG3, state="disabled")
+            self._num_fsize_spin.pack(side="left")
+            tk.Label(p, text="pt", bg=BG2, fg=FG2,
+                     font=FONT_SM).pack(side="left", padx=2)
+        _row(_t("gmw.num_fsize"), _nfsize_w)
+
+        def _ncol_w(p):
+            _entry(p, self._num_color, 9)
+            _swatch(p, self._num_color)
+        _row(_t("gmw.num_color"), _ncol_w)
+
+        # ════════════════════════════════════════════════════════════════════
+        # D · Headphones overlay (design-specific)
+        self._hp_section = tk.Frame(inner, bg=BG2)
+        self._hp_section.pack(fill="x")
+
+        def _hphdr(txt):
+            tk.Label(self._hp_section, text=txt, bg=BG2, fg=FG2,
+                     font=("Segoe UI", 8, "bold")).pack(
+                         anchor="w", padx=14, pady=(10, 2))
+
+        def _hprow(lbl, fn):
+            r = tk.Frame(self._hp_section, bg=BG2)
+            r.pack(fill="x", **P)
+            tk.Label(r, text=lbl, bg=BG2, fg=FG, font=FONT_SM,
+                     width=22, anchor="e").pack(side="left", padx=(0, 6))
+            fn(r)
+
+        _hphdr("━  Headphones")
+
+        def _show_hp_w(p):
+            tk.Checkbutton(p, text="Show headphones",
+                           variable=self._show_hp,
+                           bg=BG2, fg=FG, selectcolor=BG3,
+                           activebackground=BG2, font=FONT_SM).pack(side="left")
+        _hprow("", _show_hp_w)
+
+        def _hpcol_w(p):
+            _entry(p, self._hp_color, 9)
+            _swatch(p, self._hp_color)
+        _hprow("Colour :", _hpcol_w)
+
+        # ════════════════════════════════════════════════════════════════════
+        # E · Sub-text
+        _hdr("━  Sub-text")
+
+        def _shtgl_w(p):
+            tk.Checkbutton(p, text=_t("gmw.show_subtext"),
+                           variable=self._show_sub,
+                           bg=BG2, fg=FG, selectcolor=BG3,
+                           activebackground=BG2, font=FONT_SM,
+                           command=self._toggle_sub_section).pack(side="left")
+        _row("", _shtgl_w)
+
+        self._sub_section = tk.Frame(inner, bg=BG2)
+        self._sub_section.pack(fill="x")
+
+        def _sr(lbl, fn):
+            r = tk.Frame(self._sub_section, bg=BG2)
+            r.pack(fill="x", **P)
+            tk.Label(r, text=lbl, bg=BG2, fg=FG, font=FONT_SM,
+                     width=22, anchor="e").pack(side="left", padx=(0, 6))
+            fn(r)
+
+        _sr(_t("gmw.sub_text"), lambda p: _entry(p, self._sub_text))
+        _font_row(_t("gmw.sub_font"), self._sub_font_fam,
+                  self._sub_font_sty, parent=self._sub_section)
+
+        def _sfsize_w(p):
+            _spin(p, self._sub_fsize_pt, 4, 999, width=6)
+            tk.Label(p, text="pt", bg=BG2, fg=FG2,
+                     font=FONT_SM).pack(side="left", padx=2)
+        _sr(_t("gmw.sub_fsize"), _sfsize_w)
+
+        def _strk_w(p):
+            _spin(p, self._sub_tracking, -500, 500, inc=1, width=6)
+            tk.Label(p, text="px", bg=BG2, fg=FG2,
+                     font=FONT_SM).pack(side="left", padx=2)
+        _sr(_t("gmw.sub_tracking"), _strk_w)
+
+        def _scol_w(p):
+            _entry(p, self._sub_color, 9)
+            _swatch(p, self._sub_color)
+        _sr(_t("gmw.sub_color"), _scol_w)
+
+        # ════════════════════════════════════════════════════════════════════
+        # F · Sheet layout
+        _hdr("━  " + _t("gmw.paper"))
+        def _paper_w(p):
+            ttk.Combobox(p, textvariable=self._paper,
+                         values=list(self.PAPER_MM), state="readonly",
+                         width=24, style="Custom.TCombobox").pack(side="left")
+        _row(_t("gmw.paper"), _paper_w)
+
+        def _orient_w(p):
+            for val, key in (("portrait", "gmw.portrait"),
+                              ("landscape", "gmw.landscape")):
+                tk.Radiobutton(p, text=_t(key), variable=self._orient,
+                               value=val, bg=BG2, fg=FG, selectcolor=BG3,
+                               activebackground=BG2,
+                               font=FONT_SM).pack(side="left", padx=4)
+        _row(_t("gmw.orient"), _orient_w)
+
+        _row(_t("gmw.margin"), lambda p: _spin_mm(p, self._margin))
+        _row(_t("gmw.gap"),    lambda p: _spin_mm(p, self._gap))
+        _row(_t("gmw.dpi"),    lambda p: _spin(p, self._dpi, 72, 600, width=6))
+
+        # ════════════════════════════════════════════════════════════════════
+        # G · Output
+        _hdr("━  " + _t("gmw.out_folder"))
+        def _out_w(p):
+            _entry(p, self._out_folder)
+            _folder_btn(p, self._pick_out_folder)
+        _row(_t("gmw.out_folder"), _out_w)
+
+        def _printer_w(p):
+            self._printer_cb = ttk.Combobox(
+                p, textvariable=self._printer, state="readonly",
+                width=24, style="Custom.TCombobox")
+            self._printer_cb.pack(side="left")
+        _row(_t("gmw.printers"), _printer_w)
+
+        def _mono_w(p):
+            tk.Checkbutton(p, text=_t("gmw.monochrome"),
+                           variable=self._monochrome,
+                           bg=BG2, fg=FG, selectcolor=BG3,
+                           activebackground=BG2, font=FONT_SM).pack(side="left")
+        _row("", _mono_w)
+
+        # ── Right: preview + buttons ──────────────────────────────────────
+        right = tk.Frame(self, bg=BG)
+        right.grid(row=0, column=1, sticky="nsew", padx=10, pady=10)
+        right.rowconfigure(0, weight=1)
+        right.columnconfigure(0, weight=1)
+
+        pf = tk.Frame(right, bg=BG3)
+        pf.grid(row=0, column=0, sticky="nsew")
+        pf.rowconfigure(0, weight=1)
+        pf.columnconfigure(0, weight=1)
+
+        self._canvas = tk.Canvas(pf, bg=BG3, highlightthickness=0,
+                                 cursor="crosshair")
+        self._canvas.grid(row=0, column=0, sticky="nsew")
+        self._canvas.bind("<Configure>",
+                          lambda e: self._schedule_preview(delay=200))
+
+        tk.Label(right, textvariable=self._layout_info,
+                 bg=BG, fg=FG2, font=FONT_SM).grid(
+                     row=1, column=0, sticky="w", pady=(4, 0))
+
+        btn_row = tk.Frame(right, bg=BG)
+        btn_row.grid(row=2, column=0, sticky="e", pady=(8, 0))
+        for txt, cmd in (
+            (_t("gmw.export_png"), self._export_png),
+            (_t("gmw.export_pdf"), self._export_pdf),
+            (_t("gmw.print"),      self._print_layout),
+        ):
+            tk.Button(btn_row, text=txt, bg=ACCENT, fg=FG, relief="flat",
+                      font=FONT_SM, cursor="hand2", padx=12, pady=6,
+                      command=cmd).pack(side="left", padx=4)
+
+        self._schedule_preview(delay=300)
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Design preset application
+    # ─────────────────────────────────────────────────────────────────────────
+    def _apply_design(self, name: str):
+        """Push a design's defaults into all vars (without triggering a cascade
+        of individual previews — we block traces during the bulk-set)."""
+        cfg = self.DESIGNS.get(name)
+        if cfg is None:
+            return
+
+        # Bulk-set without firing individual traces
+        for var, key in (
+            (self._tile_w,       "tile_w"),
+            (self._tile_h,       "tile_h"),
+            (self._tile_bg,      "tile_bg"),
+            (self._num_font_fam, "num_font_fam"),
+            (self._num_font_sty, "num_font_sty"),
+            (self._num_fsize_pt, "num_fsize_pt"),
+            (self._num_color,    "num_color"),
+            (self._sub_text,     "sub_text"),
+            (self._sub_font_fam, "sub_font_fam"),
+            (self._sub_font_sty, "sub_font_sty"),
+            (self._sub_fsize_pt, "sub_fsize_pt"),
+            (self._sub_tracking, "sub_tracking"),
+            (self._sub_color,    "sub_color"),
+            (self._hp_color,     "hp_color"),
+        ):
+            var.set(cfg[key])
+
+        self._num_auto.set(cfg["num_auto"])
+        self._show_sub.set(cfg["show_sub"])
+        self._show_hp.set(cfg.get("headphones", False))
+
+        # Update spinbox state
+        if hasattr(self, "_num_fsize_spin"):
+            self._num_fsize_spin.configure(
+                state="disabled" if cfg["num_auto"] else "normal")
+
+        # Show/hide folder section
+        if cfg["design_id"] == "folder":
+            self._folder_sec.pack(fill="x")
+            self._hp_section.pack_forget()
+        else:
+            self._folder_sec.pack_forget()
+            if cfg.get("headphones"):
+                self._hp_section.pack(fill="x")
+            else:
+                self._hp_section.pack_forget()
+
+        # Show/hide sub-text section
+        if cfg["show_sub"]:
+            self._sub_section.pack(fill="x")
+        else:
+            self._sub_section.pack_forget()
+
+        self._schedule_preview()
+
+    def _on_design_change(self, *_):
+        self._apply_design(self._design_name.get())
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Toggle helpers
+    # ─────────────────────────────────────────────────────────────────────────
+    def _toggle_num_spin(self):
+        if hasattr(self, "_num_fsize_spin"):
+            self._num_fsize_spin.configure(
+                state="disabled" if self._num_auto.get() else "normal")
+        self._schedule_preview()
+
+    def _toggle_sub_section(self):
+        if self._show_sub.get():
+            self._sub_section.pack(fill="x")
+        else:
+            self._sub_section.pack_forget()
+        self._schedule_preview()
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Pickers
+    # ─────────────────────────────────────────────────────────────────────────
+    def _pick_folder(self):
+        d = filedialog.askdirectory(parent=self)
+        if d:
+            self._folder.set(d)
+            if not self._out_folder.get():
+                self._out_folder.set(d)
+
+    def _pick_out_folder(self):
+        d = filedialog.askdirectory(parent=self)
+        if d:
+            self._out_folder.set(d)
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Printer list (async)
+    # ─────────────────────────────────────────────────────────────────────────
+    def _load_printers_async(self):
+        def _load():
+            try:
+                result = subprocess.run(
+                    ["powershell", "-NoProfile", "-Command",
+                     "Get-Printer | Select-Object -ExpandProperty Name"],
+                    capture_output=True, text=True, timeout=10,
+                    creationflags=(subprocess.CREATE_NO_WINDOW
+                                   if hasattr(subprocess, "CREATE_NO_WINDOW")
+                                   else 0))
+                names = [ln.strip() for ln in result.stdout.splitlines()
+                         if ln.strip()]
+                self._printers = names
+                if self.winfo_exists():
+                    self.after(0, self._update_printer_cb)
+            except Exception:
+                pass
+        threading.Thread(target=_load, daemon=True).start()
+
+    def _update_printer_cb(self):
+        if hasattr(self, "_printer_cb") and self._printers:
+            self._printer_cb["values"] = self._printers
+            self._printer_cb.set(self._printers[0])
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Font helper
+    # ─────────────────────────────────────────────────────────────────────────
+    def _font_path(self, family: str, style: str) -> str:
+        _get_font_families()
+        key = f"{family} {style}".strip()
+        return _INSTALLED_FONTS.get(key) or _INSTALLED_FONTS.get(family, "")
+
+    @staticmethod
+    def _pt2px(pt: float, dpi: int) -> int:
+        return max(1, round(pt * dpi / 72))
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Tile renderer
+    # ─────────────────────────────────────────────────────────────────────────
+    def _render_tile(self, n: int, tw: int, th: int, dpi: int):
+        from PIL import Image as _Img, ImageDraw as _IDraw, ImageFont as _IFont
+
+        tile = _Img.new("RGB", (tw, th), self._tile_bg.get() or "#ffffff")
+        draw = _IDraw.Draw(tile)
+
+        cfg = self.DESIGNS.get(self._design_name.get(), {})
+        design_id = cfg.get("design_id", "acoustiguide")
+
+        # ── Sizes ────────────────────────────────────────────────────────
+        if self._num_auto.get():
+            scale    = self._tile_h.get() / 100.0
+            num_pt   = round(120.0 * scale)
+            sub_pt   = round(44.0  * scale)
+        else:
+            num_pt   = self._num_fsize_pt.get()
+            sub_pt   = self._sub_fsize_pt.get()
+
+        num_px = self._pt2px(num_pt, dpi)
+        sub_px = self._pt2px(sub_pt, dpi)
+        has_sub = self._show_sub.get() and self._sub_text.get().strip()
+
+        # ── Design-specific graphics ─────────────────────────────────────
+        if design_id == "acoustiguide" and self._show_hp.get():
+            self._draw_headphones(draw, tw, th, has_sub)
+
+        # ── Number ───────────────────────────────────────────────────────
+        fp = self._font_path(self._num_font_fam.get(), self._num_font_sty.get())
+        try:
+            num_font = _IFont.truetype(fp, num_px) if fp else _IFont.load_default()
+        except Exception:
+            num_font = _IFont.load_default()
+
+        num_str = str(n)
+        num_col = self._num_color.get() or "#000000"
+        # Vertical centre: ~40% from top if sub-text is visible, else middle
+        num_cy  = int(th * 0.42) if has_sub else (th // 2)
+        bb = draw.textbbox((0, 0), num_str, font=num_font)
+        nx = (tw - (bb[2] - bb[0])) // 2 - bb[0]
+        ny = num_cy - (bb[3] - bb[1]) // 2 - bb[1]
+        draw.text((nx, ny), num_str, font=num_font, fill=num_col)
+
+        # ── Sub-text ─────────────────────────────────────────────────────
+        if has_sub:
+            sfp = self._font_path(self._sub_font_fam.get(),
+                                  self._sub_font_sty.get())
+            try:
+                sub_font = _IFont.truetype(sfp, sub_px) if sfp else _IFont.load_default()
+            except Exception:
+                sub_font = _IFont.load_default()
+            self._draw_tracked(draw, self._sub_text.get().strip(),
+                               sub_font, self._sub_tracking.get(),
+                               tw // 2, int(th * 0.855),
+                               self._sub_color.get() or "#000000")
+
+        return tile
+
+    def _draw_headphones(self, draw, tw: int, th: int, has_sub: bool):
+        """Draw the Acoustiguide headphones arc + earpieces in PIL vector."""
+        from PIL import ImageDraw as _IDraw  # already imported — just for hint
+        col = self._hp_color.get() or "#727171"
+
+        # Scale all geometry to the tile size (designed at 100×100 reference)
+        sx = tw / 100.0
+        sy = th / 100.0
+
+        def s(x, y):   # scale point
+            return (round(x * sx), round(y * sy))
+
+        lw = max(1, round(3 * (sx + sy) / 2))   # line width scaled
+
+        # Arc: semicircle from ~left to ~right, top half of tile
+        # bounding box of the circle arc
+        # In the reference design the arc sits from about (10,8)→(90,88)
+        # covering roughly the upper 88% of height — it loops over the number
+        cx, cy_ref = 50.0, 48.0   # circle centre (ref coords)
+        r = 36.0                   # radius
+
+        bbox = [s(cx - r, cy_ref - r), s(cx + r, cy_ref + r)]
+        # Draw arc from 210° to 330° (bottom-centre notch) going through top
+        draw.arc([bbox[0][0], bbox[0][1], bbox[1][0], bbox[1][1]],
+                 start=200, end=340, fill=col, width=lw)
+
+        # Earpieces: two filled circles at end of arc
+        er = max(2, round(5 * (sx + sy) / 2))  # earpiece radius
+        import math
+        for angle_deg in (200, 340):
+            angle_rad = math.radians(angle_deg)
+            ex = round((cx + r * math.cos(angle_rad)) * sx)
+            ey = round((cy_ref + r * math.sin(angle_rad)) * sy)
+            draw.ellipse([ex - er, ey - er, ex + er, ey + er], fill=col)
+
+    def _draw_tracked(self, draw, text: str, font, tracking_px: int,
+                      center_x: int, center_y: int, fill: str):
+        if not text:
+            return
+        widths, ascents = [], []
+        for ch in text:
+            bb = draw.textbbox((0, 0), ch, font=font)
+            widths.append(bb[2] - bb[0])
+            ascents.append(bb[3] - bb[1])
+        total_w = sum(widths) + tracking_px * max(0, len(text) - 1)
+        max_h   = max(ascents) if ascents else 0
+        x = center_x - total_w // 2
+        y = center_y - max_h  // 2
+        for i, ch in enumerate(text):
+            draw.text((x, y), ch, font=font, fill=fill)
+            x += widths[i] + tracking_px
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Layout engine
+    # ─────────────────────────────────────────────────────────────────────────
+    def _generate_layout(self, dpi_override=None):
+        from PIL import Image as _Img, ImageDraw as _IDraw, ImageFont as _IFont
+
+        dpi = dpi_override or max(72, self._dpi.get())
+        pw_mm, ph_mm = self.PAPER_MM[self._paper.get()]
+        if self._orient.get() == "portrait":
+            pw_mm, ph_mm = min(pw_mm, ph_mm), max(pw_mm, ph_mm)
+        else:
+            pw_mm, ph_mm = max(pw_mm, ph_mm), min(pw_mm, ph_mm)
+
+        def mm2px(mm): return round(mm / 25.4 * dpi)
+
+        PW = mm2px(pw_mm)
+        PH = mm2px(ph_mm)
+        margin = mm2px(self._margin.get())
+        gap    = mm2px(self._gap.get())
+        tw     = mm2px(self._tile_w.get())
+        th     = mm2px(self._tile_h.get())
+        if tw <= 0 or th <= 0:
+            return None
+
+        cols = max(1, (PW - 2 * margin + gap) // (tw + gap))
+        rows = max(1, (PH - 2 * margin + gap) // (th + gap))
+
+        nums    = list(range(self._num_from.get(), self._num_to.get() + 1))
+        total   = len(nums)
+        placed  = 0
+
+        sheet   = _Img.new("RGB", (PW, PH), "white")
+        draw    = _IDraw.Draw(sheet)
+
+        design_id = self.DESIGNS.get(self._design_name.get(), {}).get(
+            "design_id", "acoustiguide")
+        is_folder = (design_id == "folder")
+        src = self._folder.get()
+
+        try:
+            lbl_font = _IFont.truetype("C:/Windows/Fonts/arial.ttf", mm2px(3))
+        except Exception:
+            lbl_font = _IFont.load_default()
+
+        idx = 0
+        for r in range(rows):
+            for c in range(cols):
+                if idx >= total:
+                    break
+                n   = nums[idx]
+                x0  = margin + c * (tw + gap)
+                y0  = margin + r * (th + gap)
+                x1, y1 = x0 + tw, y0 + th
+
+                if is_folder:
+                    fname = (f"{self._prefix.get()}{n}"
+                             f"{self._suffix.get()}{self._ext.get()}")
+                    img_path = os.path.join(src, fname) if src else ""
+                    if src and os.path.isfile(img_path):
+                        try:
+                            t = _Img.open(img_path).convert("RGB").resize(
+                                (tw, th), _Img.LANCZOS)
+                            sheet.paste(t, (x0, y0))
+                            placed += 1
+                        except Exception:
+                            draw.rectangle([x0, y0, x1, y1],
+                                           outline="#cccccc", fill="#eeeeee")
+                    else:
+                        draw.rectangle([x0, y0, x1, y1],
+                                       outline="#aaaaaa", fill="#f5f5f5")
+                    draw.rectangle([x0, y0, x1, y1], outline="#888888")
+                    draw.text((x0 + 4, y0 + 4), str(n),
+                              fill="#333333", font=lbl_font)
+                else:
+                    t = self._render_tile(n, tw, th, dpi)
+                    sheet.paste(t, (x0, y0))
+                    placed += 1
+
+                # Crop marks at corners
+                cross = mm2px(3)
+                for cx_, cy_ in ((x0, y0), (x1, y0), (x0, y1), (x1, y1)):
+                    draw.line([(cx_ - cross, cy_), (cx_ + cross, cy_)],
+                              fill="#aaaaaa", width=1)
+                    draw.line([(cx_, cy_ - cross), (cx_, cy_ + cross)],
+                              fill="#aaaaaa", width=1)
+
+                idx += 1
+
+        # Monochrome conversion
+        if self._monochrome.get():
+            sheet = sheet.convert("L").convert("RGB")
+
+        self._last_placed = placed
+        self._last_total  = total
+        self._last_cols   = cols
+        self._last_rows   = rows
+        return sheet
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Preview
+    # ─────────────────────────────────────────────────────────────────────────
+    def _schedule_preview(self, delay=500, *_):
+        if self._sched_id:
+            self.after_cancel(self._sched_id)
+        self._sched_id = self.after(delay, self._render_preview)
+
+    def _render_preview(self):
+        self._sched_id = None
+        if not self.winfo_exists():
+            return
+        cw = self._canvas.winfo_width()
+        ch = self._canvas.winfo_height()
+        if cw < 10 or ch < 10:
+            return
+        preview_dpi = max(36, min(72, self._dpi.get() // 4))
+        sheet = self._generate_layout(dpi_override=preview_dpi)
+        if sheet is None:
+            return
+        self._preview_img = sheet
+        sw, sh = sheet.size
+        scale = min(cw / sw, ch / sh, 1.0)
+        nw_, nh_ = max(1, int(sw * scale)), max(1, int(sh * scale))
+        from PIL import ImageTk as _ITk
+        self._preview_tk = _ITk.PhotoImage(sheet.resize((nw_, nh_)))
+        self._canvas.delete("all")
+        ox, oy = (cw - nw_) // 2, (ch - nh_) // 2
+        self._canvas.create_image(ox, oy, anchor="nw", image=self._preview_tk)
+        self._layout_info.set(_t("gmw.layout_sum",
+                                 placed=getattr(self, "_last_placed", 0),
+                                 total=getattr(self,  "_last_total",  0),
+                                 cols=getattr(self,   "_last_cols",   0),
+                                 rows=getattr(self,   "_last_rows",   0)))
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Export / print
+    # ─────────────────────────────────────────────────────────────────────────
+    def _check_ready(self) -> bool:
+        cfg = self.DESIGNS.get(self._design_name.get(), {})
+        if cfg.get("design_id") == "folder" and not self._folder.get():
+            messagebox.showwarning(_t("gmw.title"), _t("gmw.no_src"),
+                                   parent=self)
+            return False
+        return True
+
+    def _get_out_dir(self) -> str:
+        base = self._out_folder.get() or self._folder.get()
+        if not base:
+            base = filedialog.askdirectory(parent=self,
+                                           title=_t("gmw.out_folder"))
+        if base:
+            os.makedirs(base, exist_ok=True)
+        return base
+
+    def _export_png(self):
+        if not self._check_ready():
+            return
+        out_dir = self._get_out_dir()
+        if not out_dir:
+            return
+        sheet = self._generate_layout()
+        if sheet is None:
+            return
+        out_path = os.path.join(out_dir, "guidemark_layout.png")
+        sheet.save(out_path, "PNG")
+        messagebox.showinfo(_t("gmw.title"),
+                            _t("gmw.done_png", path=out_path), parent=self)
+        try:
+            os.startfile(out_dir)
+        except Exception:
+            pass
+
+    def _export_pdf(self):
+        if not self._check_ready():
+            return
+        out_dir = self._get_out_dir()
+        if not out_dir:
+            return
+        sheet = self._generate_layout()
+        if sheet is None:
+            return
+        out_path = os.path.join(out_dir, "guidemark_layout.pdf")
+        sheet.save(out_path, "PDF", resolution=max(72, self._dpi.get()))
+        messagebox.showinfo(_t("gmw.title"),
+                            _t("gmw.done_pdf", path=out_path), parent=self)
+        try:
+            os.startfile(out_path)
+        except Exception:
+            pass
+
+    def _print_layout(self):
+        if not self._check_ready():
+            return
+        sheet = self._generate_layout()
+        if sheet is None:
+            return
+        import tempfile
+        tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+        tmp.close()
+        sheet.save(tmp.name, "PNG")
+        try:
+            os.startfile(tmp.name, "print")
+        except Exception as e:
+            messagebox.showerror("Print error", str(e), parent=self)
+
+# =============================================================================
 #  HOME SCREEN
 # =============================================================================
 class HomeScreen(tk.Tk):
@@ -5154,12 +6179,13 @@ class HomeScreen(tk.Tk):
 
         # ── Tool cards ────────────────────────────────────────────────────────
         tools = [
-            ("✏",  "Rename",    _t("home.rename_d"),     RenameWizard,    "#4cc9f0"),
-            ("⤡",  "Resize",    _t("home.resize_d"),     ResizeWizard,    "#4895ef"),
-            ("🗜", "Compress",  _t("home.comp_d"),       CompressWizard,  "#ff6b6b"),
-            ("🔄", "Convert",   _t("conv.desc"),         ConvertWizard,   "#f4a261"),
-            ("🎨", "Generate",  _t("home.gen_d"),        ImageGenWizard,  "#7c6af7"),
-            ("📋", "Clipboard", _t("home.clip_d"),       ClipboardManager,"#f72585"),
+            ("✏",  "Rename",      _t("home.rename_d"),     RenameWizard,      "#4cc9f0"),
+            ("⤡",  "Resize",      _t("home.resize_d"),     ResizeWizard,      "#4895ef"),
+            ("🗜", "Compress",    _t("home.comp_d"),       CompressWizard,    "#ff6b6b"),
+            ("🔄", "Convert",     _t("conv.desc"),         ConvertWizard,     "#f4a261"),
+            ("🎨", "Generate",    _t("home.gen_d"),        ImageGenWizard,    "#7c6af7"),
+            ("📐", "Guide Mark",  _t("home.gmw_d"),        GuideMarkWizard,   "#2ec4b6"),
+            ("📋", "Clipboard",   _t("home.clip_d"),       ClipboardManager,  "#f72585"),
         ]
         for ico, title, desc, cls, color in tools:
             self._tool_card(ico, title, desc, cls, color)

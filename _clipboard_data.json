@@ -1,0 +1,17 @@
+{
+  "categories": [
+    {
+      "name": "Général",
+      "items": []
+    },
+    {
+      "name": "Kikubi",
+      "items": [
+        {
+          "label": "HTML",
+          "text": "<h2 style=\"font-size:22pt; font-weight:bold; margin:20px 0;\"></h2>\n\n<p>&nbsp;</p>\n"
+        }
+      ]
+    }
+  ]
+}
