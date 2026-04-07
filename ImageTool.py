@@ -5719,6 +5719,8 @@ class GuideMarkWizard(tk.Toplevel):
             values=[p["name"] for p in self._presets],
             state="normal", width=13, style="Custom.TCombobox")
         self._preset_cb.pack(side="left", fill="x", expand=True)
+        self._preset_cb.bind("<<ComboboxSelected>>",
+                              lambda e: self._load_selected_preset())
         tk.Button(pr_row, text="Load", bg=BG3, fg=FG, relief="flat",
                   font=FONT_SM, cursor="hand2",
                   command=self._load_selected_preset).pack(
@@ -6356,8 +6358,15 @@ class GuideMarkWizard(tk.Toplevel):
         if tw <= 0 or th <= 0:
             return [_I.new("RGB", (max(1, PW), max(1, PH)), "white")]
 
-        cols     = max(1, (PW - 2*margin + gap) // (tw + gap))
-        rows     = max(1, (PH - 2*margin + gap) // (th + gap))
+        # Compute cols/rows in mm (float) so the result is DPI-independent.
+        # Using px with different DPIs produces different rounding, causing
+        # the preview layout to differ from the exported layout.
+        _gap_mm    = self._gap.get()
+        _margin_mm = self._margin.get()
+        cols = max(1, int((pw_mm - 2*_margin_mm + _gap_mm) /
+                         (self._tile_w.get() + _gap_mm)))
+        rows = max(1, int((ph_mm - 2*_margin_mm + _gap_mm) /
+                         (self._tile_h.get() + _gap_mm)))
         per_page = cols * rows
         nums     = self._parse_range()
         self._last_total  = len(nums)

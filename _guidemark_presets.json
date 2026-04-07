@@ -1,7 +1,7 @@
 [
   {
     "name": "番号パネル_文字なし",
-    "num_range": "1-15",
+    "num_range": "1-22,100,200",
     "tile_w": 100.0,
     "tile_h": 100.0,
     "margin": 10.0,
@@ -14,7 +14,7 @@
     "num_font_sty": "Medium",
     "num_auto": false,
     "num_fsize_pt": 120,
-    "num_fsize3_pt": 89,
+    "num_fsize3_pt": 88,
     "num_color": "#000000",
     "num_pos_x": 50,
     "num_pos_y": 54,
