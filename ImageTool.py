@@ -7199,27 +7199,48 @@ def _group_into_lines(words: list, y_tol: float) -> list:
 
 
 def _reflow_column(words: list, y_tol: float) -> str:
-    """Group words → visual lines → reflow into paragraphs."""
+    """
+    Group words → visual lines → reflow into paragraphs.
+
+    Three independent signals each trigger a paragraph break:
+      1. Vertical gap > 1.45 × median line spacing  (explicit spacing between paras)
+      2. This line's x0 > left_base + INDENT_MIN    (first-line indent = new para)
+      3. Previous line width < 65 % of typical width (previous line ended short = para ended)
+    """
     lines = _group_into_lines(words, y_tol)
     if not lines:
         return ""
 
-    # Median inter-line gap → paragraph threshold
+    # ── Page-level statistics ─────────────────────────────────────────────────
+    all_x0 = [min(w["x0"] for w in ws) for _, ws in lines]
+    all_x1 = [max(w["x1"] for w in ws) for _, ws in lines]
+
+    sorted_x0 = sorted(all_x0)
+    # Base left margin: 5th-percentile x0 (robust even if a few lines are flush-left)
+    p5_idx    = max(0, len(sorted_x0) // 20)
+    left_base = sorted_x0[p5_idx]
+    INDENT_MIN = 10.0   # pt — x0 must exceed left_base+10 to be "indented"
+
+    # Typical full-line width: 75th-percentile (ignores deliberately short last lines)
+    widths    = sorted(x1 - x0 for x0, x1 in zip(all_x0, all_x1))
+    typical_w = widths[int(len(widths) * 0.75)] if widths else 0.0
+    SHORT_RATIO = 0.65  # previous line shorter than this → it ended a paragraph
+
+    # ── Median inter-line gap ─────────────────────────────────────────────────
     tops = [t for t, _ in lines]
-    if len(tops) >= 2:
-        raw_gaps = [tops[i + 1] - tops[i]
-                    for i in range(len(tops) - 1)
-                    if tops[i + 1] > tops[i]]
-        raw_gaps.sort()
-        median_gap = raw_gaps[len(raw_gaps) // 2] if raw_gaps else 14.0
-    else:
-        median_gap = 14.0
+    raw_gaps = sorted(
+        tops[i + 1] - tops[i]
+        for i in range(len(tops) - 1)
+        if tops[i + 1] > tops[i]
+    )
+    median_gap  = raw_gaps[len(raw_gaps) // 2] if raw_gaps else 14.0
+    PARA_THRESH = median_gap * 1.45   # gap > this → paragraph break
 
-    PARA_THRESH = median_gap * 1.45   # gap > this = new paragraph
-
+    # ── Reflow ────────────────────────────────────────────────────────────────
     paragraphs: list = []
     cur_lines:  list = []
-    prev_top = None
+    prev_top:   float | None = None
+    prev_width: float | None = None
 
     for top, ws in lines:
         line_text = " ".join(
@@ -7227,12 +7248,32 @@ def _reflow_column(words: list, y_tol: float) -> str:
         ).strip()
         if not line_text:
             continue
-        if prev_top is not None and (top - prev_top) > PARA_THRESH:
-            if cur_lines:
-                paragraphs.append(" ".join(cur_lines))
-                cur_lines = []
+
+        x0_line = min(w["x0"] for w in ws)
+        x1_line = max(w["x1"] for w in ws)
+        lw      = x1_line - x0_line
+
+        is_break = False
+        if prev_top is not None:
+            gap = top - prev_top
+            if gap > PARA_THRESH:
+                # Signal 1: large vertical gap
+                is_break = True
+            elif x0_line > left_base + INDENT_MIN:
+                # Signal 2: first-line indent → new paragraph
+                is_break = True
+            elif (typical_w > 0 and prev_width is not None
+                  and prev_width < typical_w * SHORT_RATIO):
+                # Signal 3: previous line was short → paragraph ended there
+                is_break = True
+
+        if is_break and cur_lines:
+            paragraphs.append(" ".join(cur_lines))
+            cur_lines = []
+
         cur_lines.append(line_text)
-        prev_top = top
+        prev_top   = top
+        prev_width = lw
 
     if cur_lines:
         paragraphs.append(" ".join(cur_lines))
