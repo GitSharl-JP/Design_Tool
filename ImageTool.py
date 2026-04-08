@@ -4,6 +4,7 @@
 # =============================================================================
 
 import os, re, sys, shutil, threading, struct, zlib, json, subprocess
+import concurrent.futures as _futures
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 from pathlib import Path
@@ -2802,6 +2803,8 @@ def _gen_image(number, width, height, bg_mode, bg_color, bg_image_path,
 class FontPreviewDialog(tk.Toplevel):
     """Scrollable font picker that renders digit samples for every installed font."""
     SAMPLE = "0123456789"
+    # Max concurrent font-render threads (keeps UI responsive)
+    _MAX_WORKERS = 5
 
     def __init__(self, parent, current_font="Impact"):
         super().__init__(parent)
@@ -2813,6 +2816,8 @@ class FontPreviewDialog(tk.Toplevel):
         self._all_fonts   = list(_get_installed_fonts().keys())
         self._filtered    = list(self._all_fonts)
         self._photos: dict = {}
+        self._render_gen  = 0   # incremented on each rebuild to discard stale renders
+        self._executor    = _futures.ThreadPoolExecutor(max_workers=self._MAX_WORKERS)
         self._build()
         self.update_idletasks()
         pw, py = parent.winfo_rootx(), parent.winfo_rooty()
@@ -2855,6 +2860,11 @@ class FontPreviewDialog(tk.Toplevel):
         bot.pack(fill="x", padx=12, pady=(0, 10))
         btn(bot, _t("fpd.cancel"), self.destroy, primary=False).pack(side="right", padx=4)
 
+    def destroy(self):
+        self._render_gen = -1   # sentinel: discard all pending render callbacks
+        self._executor.shutdown(wait=False)
+        super().destroy()
+
     def _filter(self):
         q = self._search_var.get().lower()
         self._filtered = ([f for f in self._all_fonts if q in f.lower()]
@@ -2862,6 +2872,8 @@ class FontPreviewDialog(tk.Toplevel):
         self._rebuild_rows()
 
     def _rebuild_rows(self):
+        self._render_gen += 1   # invalidate all in-flight renders
+        gen = self._render_gen
         for w in self._inner.winfo_children():
             w.destroy()
         self._count_lbl.config(text=_t("fpd.count", n=len(self._filtered)))
@@ -2881,14 +2893,16 @@ class FontPreviewDialog(tk.Toplevel):
                 img_lbl.config(image=self._photos[fname])
                 img_lbl._photo_ref = self._photos[fname]
             else:
-                self._render_async(fname, img_lbl)
+                self._render_async(fname, img_lbl, gen)
         self._cv.yview_moveto(0)
         # Re-bind wheel to newly added rows
         if hasattr(self._cv, '_mw_bind_tree'):
             self._cv._mw_bind_tree(self._inner)
 
-    def _render_async(self, fname, lbl):
+    def _render_async(self, fname, lbl, gen: int):
         def _worker():
+            if self._render_gen != gen:
+                return   # stale — a newer rebuild already started
             try:
                 from PIL import Image as _Img, ImageDraw as _IDrw, ImageTk as _ITk
                 font = _load_pil_font(fname, 20)
@@ -2905,12 +2919,19 @@ class FontPreviewDialog(tk.Toplevel):
                 _IDrw.Draw(img).text((8 + ox, 4 + oy), self.SAMPLE,
                                      fill=(220, 220, 220, 255), font=font)
                 photo = _ITk.PhotoImage(img.convert("RGB"))
-                self.after(0, lambda p=photo, f=fname, l=lbl: self._set(f, p, l))
+                if self._render_gen == gen:   # still current?
+                    self.after(0, lambda p=photo, f=fname, l=lbl, g=gen:
+                               self._set(f, p, l, g))
             except Exception:
                 pass
-        threading.Thread(target=_worker, daemon=True).start()
+        try:
+            self._executor.submit(_worker)
+        except RuntimeError:
+            pass   # executor already shut down
 
-    def _set(self, fname, photo, lbl):
+    def _set(self, fname, photo, lbl, gen: int):
+        if self._render_gen != gen:
+            return   # stale
         self._photos[fname] = photo
         try:
             lbl.config(image=photo)
