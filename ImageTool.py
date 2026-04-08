@@ -2445,6 +2445,27 @@ _FONTS_DIR      = Path("C:/Windows/Fonts")
 _FONTS_DIR_USER = Path(os.path.expanduser("~")) / "AppData" / "Local" / "Microsoft" / "Windows" / "Fonts"
 _FONT_CACHE_FILE = Path(os.path.abspath(__file__)).parent / "_font_cache.json"
 
+def _count_font_files() -> int:
+    """Fast count of all TTF/OTF files in all scanned font dirs."""
+    total = 0
+    for d in [_FONTS_DIR, _FONTS_DIR_USER]:
+        if d.exists():
+            for ext in ("*.ttf", "*.otf", "*.TTF", "*.OTF"):
+                total += sum(1 for _ in d.glob(ext))
+    return total
+
+def _clear_font_cache():
+    """Delete the on-disk cache and reset in-memory globals so the next call
+    to _get_font_families() does a full rediscovery."""
+    global _FONT_FAMILIES, _INSTALLED_FONTS
+    _FONT_FAMILIES  = {}
+    _INSTALLED_FONTS = {}
+    try:
+        if _FONT_CACHE_FILE.exists():
+            _FONT_CACHE_FILE.unlink()
+    except Exception:
+        pass
+
 
 def _read_font_name(path: str):
     """Parse the 'name' table of a TTF/OTF file and return (family, style).
@@ -2549,9 +2570,11 @@ def _get_font_families() -> dict:
                 not d.exists() or d.stat().st_mtime <= cache_mtime
                 for d in [_FONTS_DIR, _FONTS_DIR_USER]
             )
-            if dirs_ok:
-                with open(_FONT_CACHE_FILE, "r", encoding="utf-8") as f:
-                    data = json.load(f)
+            with open(_FONT_CACHE_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            # Also check file count — catches installs that don't bump dir mtime
+            count_ok = (data.get("file_count", -1) == _count_font_files())
+            if dirs_ok and count_ok:
                 _FONT_FAMILIES  = data["families"]
                 _INSTALLED_FONTS = data["flat"]
                 return _FONT_FAMILIES
@@ -2566,10 +2589,11 @@ def _get_font_families() -> dict:
             if key not in flat:
                 flat[key] = path
     _INSTALLED_FONTS = dict(sorted(flat.items()))
-    # ── Save cache ────────────────────────────────────────────────────────────
+    # ── Save cache (includes file count for fast change detection) ──────────
     try:
         with open(_FONT_CACHE_FILE, "w", encoding="utf-8") as f:
-            json.dump({"families": _FONT_FAMILIES, "flat": _INSTALLED_FONTS},
+            json.dump({"families": _FONT_FAMILIES, "flat": _INSTALLED_FONTS,
+                       "file_count": _count_font_files()},
                       f, ensure_ascii=False)
     except Exception:
         pass
@@ -2836,7 +2860,8 @@ class FontPreviewDialog(tk.Toplevel):
         e.pack(side="left", padx=6)
         self._count_lbl = label(top, "", fg=FG2, font=FONT_SM)
         self._count_lbl.pack(side="left", padx=8)
-        self._search_var.trace_add("write", lambda *_: self._filter())
+        self._filter_after = None
+        self._search_var.trace_add("write", lambda *_: self._schedule_filter())
         e.focus_set()
 
         container = tk.Frame(self, bg=BG)
@@ -2858,18 +2883,45 @@ class FontPreviewDialog(tk.Toplevel):
 
         bot = styled_frame(self)
         bot.pack(fill="x", padx=12, pady=(0, 10))
+        btn(bot, "↺", self._refresh_fonts, primary=False,
+            padx=8).pack(side="left", padx=4)
+        tk.Label(bot, text="Rafraîchir les fonts", bg=BG, fg=FG2,
+                 font=FONT_SM).pack(side="left")
         btn(bot, _t("fpd.cancel"), self.destroy, primary=False).pack(side="right", padx=4)
 
     def destroy(self):
         self._render_gen = -1   # sentinel: discard all pending render callbacks
+        if self._filter_after is not None:
+            try:
+                self.after_cancel(self._filter_after)
+            except Exception:
+                pass
         self._executor.shutdown(wait=False)
         super().destroy()
 
+    def _schedule_filter(self):
+        """Debounce: wait 250 ms after last keypress before filtering."""
+        if self._filter_after is not None:
+            try:
+                self.after_cancel(self._filter_after)
+            except Exception:
+                pass
+        self._filter_after = self.after(250, self._filter)
+
     def _filter(self):
+        self._filter_after = None
         q = self._search_var.get().lower()
         self._filtered = ([f for f in self._all_fonts if q in f.lower()]
                           if q else list(self._all_fonts))
         self._rebuild_rows()
+
+    def _refresh_fonts(self):
+        """Force-rebuild the font cache (picks up any newly installed fonts)."""
+        _clear_font_cache()
+        _get_font_families()
+        self._all_fonts  = list(_get_installed_fonts().keys())
+        self._photos     = {}          # discard cached preview images
+        self._filter()                 # re-apply current search
 
     def _rebuild_rows(self):
         self._render_gen += 1   # invalidate all in-flight renders
