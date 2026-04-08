@@ -2883,8 +2883,9 @@ class FontPreviewDialog(tk.Toplevel):
 
         bot = styled_frame(self)
         bot.pack(fill="x", padx=12, pady=(0, 10))
-        btn(bot, "↺", self._refresh_fonts, primary=False,
-            padx=8).pack(side="left", padx=4)
+        tk.Button(bot, text="↺", command=self._refresh_fonts,
+                  bg=BG3, fg=FG, relief="flat", font=FONT_SM,
+                  cursor="hand2", padx=6).pack(side="left", padx=(0, 4))
         tk.Label(bot, text="Rafraîchir les fonts", bg=BG, fg=FG2,
                  font=FONT_SM).pack(side="left")
         btn(bot, _t("fpd.cancel"), self.destroy, primary=False).pack(side="right", padx=4)
