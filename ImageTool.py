@@ -7114,18 +7114,77 @@ def _pdf_extract_file(path: str, col_detect: bool,
     return result
 
 
+# CJK Unicode ranges: CJK Unified, Hangul, Hiragana, Katakana, CJK Compat, Kangxi…
+_CJK_RANGES = (
+    (0x1100, 0x11FF),   # Hangul Jamo
+    (0x3000, 0x9FFF),   # CJK / Hiragana / Katakana / Bopomofo / Kangxi…
+    (0xA000, 0xA4CF),   # Yi
+    (0xAC00, 0xD7AF),   # Hangul syllables
+    (0xF900, 0xFAFF),   # CJK Compatibility Ideographs
+    (0xFE30, 0xFE4F),   # CJK Compatibility Forms
+    (0xFF00, 0xFFEF),   # Halfwidth / Fullwidth Forms
+    (0x20000, 0x2A6DF), # CJK Extension B
+)
+
+
+def _is_cjk_char(c: str) -> bool:
+    o = ord(c)
+    return any(lo <= o <= hi for lo, hi in _CJK_RANGES)
+
+
+def _cjk_ratio(text: str) -> float:
+    """Fraction of non-whitespace chars that are CJK."""
+    chars = [c for c in text if not c.isspace()]
+    if not chars:
+        return 0.0
+    return sum(1 for c in chars if _is_cjk_char(c)) / len(chars)
+
+
+def _pick_preview_font() -> str:
+    """Best available monospace font that covers CJK + Latin."""
+    try:
+        import tkinter.font as tkf
+        avail = set(tkf.families())
+    except Exception:
+        avail = set()
+    # Prefer fonts that cover CJK + monospace; fall back gracefully
+    candidates = [
+        "Noto Sans Mono",
+        "Yu Gothic",        # Windows 10+ Japanese/CJK
+        "Meiryo",           # Windows Vista+ Japanese
+        "MS Gothic",        # Legacy Japanese
+        "Malgun Gothic",    # Korean
+        "SimSun",           # Chinese Simplified
+        "MingLiU",          # Chinese Traditional
+        "Courier New",
+    ]
+    for f in candidates:
+        if f in avail:
+            return f
+    return "Courier New"
+
+
 def _pdf_page_text(page, col_detect: bool) -> str:
-    """Extract text from one pdfplumber page with paragraph reflow."""
+    """Extract text from one pdfplumber page — CJK-aware with paragraph reflow."""
+    # ── Latin / spaced scripts: word-level ────────────────────────────────────
     words = page.extract_words(x_tolerance=3, y_tolerance=3,
                                 keep_blank_chars=False)
     if words:
+        # Sample the first 200 words to detect CJK
+        sample = " ".join(w["text"] for w in words[:200])
+        if _cjk_ratio(sample) >= 0.20:
+            # For CJK, words() merges everything into huge tokens → use chars
+            return _pdf_page_text_cjk(page)
         return _reflow_words(words, float(page.width), col_detect)
-    # Fallback: raw extract_text (no layout, just flow)
+
+    # ── Fallback: raw extract_text ────────────────────────────────────────────
     try:
-        t = (page.extract_text() or "").strip()
-        # Collapse > 2 consecutive blank lines
+        raw = (page.extract_text() or "").strip()
+        if _cjk_ratio(raw) >= 0.20:
+            return _reflow_cjk_raw(raw)
+        # Latin fallback: collapse blank lines
         out, blanks = [], 0
-        for ln in t.splitlines():
+        for ln in raw.splitlines():
             if ln.strip():
                 blanks = 0
                 out.append(ln.rstrip())
@@ -7136,6 +7195,145 @@ def _pdf_page_text(page, col_detect: bool) -> str:
         return "\n".join(out)
     except Exception:
         return ""
+
+
+def _pdf_page_text_cjk(page) -> str:
+    """
+    CJK-aware extraction via character positions.
+    Groups chars into lines by Y-proximity, then detects paragraph breaks.
+    """
+    try:
+        chars = page.extract_chars(x_tolerance=1, y_tolerance=3)
+    except Exception:
+        chars = []
+    if not chars:
+        raw = page.extract_text() or ""
+        return _reflow_cjk_raw(raw)
+
+    # Sort chars: Y bucket → X
+    Y_TOL = 4
+    chars_s = sorted(chars, key=lambda c: (round(c["top"] / Y_TOL), c["x0"]))
+
+    # Group into lines
+    lines: list = []   # list of (avg_top, text_str, x0_of_first_char)
+    cur_chars: list = []
+    cur_top = chars_s[0]["top"]
+    for ch in chars_s:
+        if abs(ch["top"] - cur_top) <= Y_TOL:
+            cur_chars.append(ch)
+            cur_top = sum(c["top"] for c in cur_chars) / len(cur_chars)
+        else:
+            if cur_chars:
+                txt = "".join(c["text"] for c in cur_chars).strip()
+                lines.append((cur_top, txt, cur_chars[0]["x0"]))
+            cur_chars = [ch]
+            cur_top = ch["top"]
+    if cur_chars:
+        txt = "".join(c["text"] for c in cur_chars).strip()
+        lines.append((cur_top, txt, cur_chars[0]["x0"]))
+
+    return _reflow_cjk_lines(lines, float(page.width))
+
+
+def _reflow_cjk_lines(lines: list, page_width: float) -> str:
+    """
+    Paragraph detection for CJK line tuples: (top, text, x0).
+    Rules:
+      1. Vertical gap > 1.5 × median → new paragraph
+      2. Line starts with full-width space 　 or ASCII indent ≥10pt from left_base
+      3. Previous line ends with CJK sentence-end punctuation (。？！…）」』）
+    """
+    if not lines:
+        return ""
+
+    CJK_ENDS = set("。？！…」』）)")
+
+    tops   = [t for t, _, _ in lines]
+    widths_sorted = sorted(
+        [len(txt) for _, txt, _ in lines if txt], reverse=True
+    )
+    # 5th-percentile left margin
+    x0s = sorted(x for _, _, x in lines)
+    left_base = x0s[max(0, len(x0s) // 20)]
+    INDENT_MIN = 8.0
+
+    raw_gaps = sorted(
+        tops[i + 1] - tops[i]
+        for i in range(len(tops) - 1)
+        if tops[i + 1] > tops[i]
+    )
+    median_gap  = raw_gaps[len(raw_gaps) // 2] if raw_gaps else 14.0
+    PARA_THRESH = median_gap * 1.50
+
+    paragraphs: list = []
+    cur:        list = []
+    prev_top:   float | None = None
+    prev_text   = ""
+
+    for top, text, x0 in lines:
+        if not text:
+            continue
+        is_break = False
+        if prev_top is not None:
+            gap = top - prev_top
+            if gap > PARA_THRESH:
+                is_break = True
+            elif text.startswith("\u3000") or x0 > left_base + INDENT_MIN:
+                # full-width space indent OR positional indent
+                is_break = True
+            elif prev_text and prev_text[-1] in CJK_ENDS:
+                # previous line ended a CJK sentence
+                is_break = True
+        if is_break and cur:
+            paragraphs.append("".join(cur))
+            cur = []
+        # CJK: no space between lines of same paragraph
+        cur.append(text)
+        prev_top  = top
+        prev_text = text
+
+    if cur:
+        paragraphs.append("".join(cur))
+
+    return "\n\n".join(paragraphs)
+
+
+def _reflow_cjk_raw(raw: str) -> str:
+    """
+    Paragraph reflow for CJK text from plain extract_text().
+    Consecutive non-empty lines with no indent/sentence-end → joined (no space).
+    """
+    CJK_ENDS = set("。？！…」』）)")
+    lines = [ln.rstrip() for ln in raw.splitlines()]
+
+    paragraphs: list = []
+    cur:        list = []
+    prev = ""
+
+    for ln in lines:
+        stripped = ln.strip()
+        if not stripped:
+            if cur:
+                paragraphs.append("".join(cur))
+                cur = []
+            prev = ""
+            continue
+        # Indent → new paragraph
+        indent = len(ln) - len(ln.lstrip())
+        if indent >= 2 and cur:
+            paragraphs.append("".join(cur))
+            cur = []
+        cur.append(stripped)
+        # If previous line ended sentence, next line starts new para
+        if prev and prev[-1] in CJK_ENDS and cur:
+            paragraphs.append("".join(cur))
+            cur = []
+        prev = stripped
+
+    if cur:
+        paragraphs.append("".join(cur))
+
+    return "\n\n".join(p for p in paragraphs if p)
 
 
 def _reflow_words(words: list, page_width: float, col_detect: bool) -> str:
@@ -7283,14 +7481,75 @@ def _reflow_column(words: list, y_tol: float) -> str:
 
 def _pdf_export_txt(pages: list, out_path: str):
     sep = "\n\n" + "═" * 62 + "  [page break]  " + "═" * 4 + "\n\n"
-    with open(out_path, "w", encoding="utf-8") as f:
+    # UTF-8 with BOM so Windows Notepad / Excel open CJK cleanly
+    with open(out_path, "w", encoding="utf-8-sig") as f:
         f.write(sep.join(pages))
+
+
+def _pdf_qc_check(pages: list) -> list:
+    """
+    Quality check — returns a list of dicts, one per page:
+      ok (bool), chars (int), suspicious (int), cjk_pct (float), issues (list[str])
+    Suspicious chars: replacement □, low char-density pages, garbled runs.
+    """
+    import unicodedata
+    results = []
+    for i, text in enumerate(pages):
+        issues = []
+        non_ws = [c for c in text if not c.isspace()]
+        chars  = len(non_ws)
+
+        # Replacement / unknown characters
+        bad = sum(1 for c in non_ws
+                  if c in ("\ufffd", "\u25a1", "\u25a0")
+                  or unicodedata.category(c) == "Cn")   # unassigned
+        if bad:
+            issues.append(f"{bad} car. non reconnu(s)")
+
+        # Very low char count on a non-empty page
+        if chars > 0 and chars < 20:
+            issues.append("page quasi vide")
+
+        # Repeated character runs (likely garbled OCR/encoding)
+        import re as _re
+        if _re.search(r"(.)\1{6,}", text):
+            issues.append("répétitions suspectes")
+
+        cjk_pct = _cjk_ratio(text) * 100
+        results.append({
+            "page":    i + 1,
+            "chars":   chars,
+            "bad":     bad,
+            "cjk_pct": cjk_pct,
+            "issues":  issues,
+            "ok":      len(issues) == 0 and chars > 0,
+        })
+    return results
+
+
+def _docx_set_fonts(run, latin: str, cjk: str, size_pt: float):
+    """Set both Latin + East-Asian fonts on a run (python-docx only exposes Latin)."""
+    from docx.oxml.ns import qn
+    run.font.name = latin
+    run.font.size_pt = size_pt  # will be set by caller; this is a no-op placeholder
+    rPr = run._r.get_or_add_rPr()
+    rFonts = rPr.get_or_add_rFonts()
+    rFonts.set(qn("w:eastAsia"), cjk)
+    rFonts.set(qn("w:cs"),       cjk)
 
 
 def _pdf_export_docx(pages: list, out_path: str, source_name: str = ""):
     from docx import Document
     from docx.shared import Pt, Cm, RGBColor
     from docx.enum.text import WD_LINE_SPACING  # noqa: F401
+    from docx.oxml.ns import qn
+
+    # Detect dominant script from all pages combined
+    all_text = "\n".join(pages)
+    is_cjk   = _cjk_ratio(all_text) >= 0.15
+    LATIN_FONT = "Calibri"
+    CJK_FONT   = "Yu Gothic" if is_cjk else "Calibri"
+    BODY_PT    = 11.0
 
     doc = Document()
     sec = doc.sections[0]
@@ -7299,10 +7558,15 @@ def _pdf_export_docx(pages: list, out_path: str, source_name: str = ""):
     sec.left_margin   = Cm(2.5)
     sec.right_margin  = Cm(2.5)
 
-    # Set Normal style defaults: Calibri 11pt, 1.15 line spacing, 8pt after
+    # Normal style: Latin + CJK fonts, 1.15 spacing
     normal = doc.styles["Normal"]
-    normal.font.name = "Calibri"
-    normal.font.size = Pt(11)
+    normal.font.name = LATIN_FONT
+    normal.font.size = Pt(BODY_PT)
+    # East-Asia font on the style element
+    rPr = normal.element.get_or_add_rPr()
+    rFonts = rPr.get_or_add_rFonts()
+    rFonts.set(qn("w:eastAsia"), CJK_FONT)
+    rFonts.set(qn("w:cs"),       CJK_FONT)
     normal.paragraph_format.space_after  = Pt(8)
     normal.paragraph_format.space_before = Pt(0)
     normal.paragraph_format.line_spacing_rule = WD_LINE_SPACING.MULTIPLE
@@ -7310,47 +7574,50 @@ def _pdf_export_docx(pages: list, out_path: str, source_name: str = ""):
 
     GREY = RGBColor(0x99, 0x99, 0xbb)
 
-    # Source file name as small header
+    def _add_run(para, text, bold=False, size=BODY_PT, color=None):
+        run = para.add_run(text)
+        run.font.name = LATIN_FONT
+        run.font.size = Pt(size)
+        run.bold      = bold
+        if color:
+            run.font.color.rgb = color
+        # East-Asian font slot
+        rPr2 = run._r.get_or_add_rPr()
+        rf   = rPr2.get_or_add_rFonts()
+        rf.set(qn("w:eastAsia"), CJK_FONT)
+        rf.set(qn("w:cs"),       CJK_FONT)
+        return run
+
+    # Source file header
     if source_name:
         ph = doc.add_paragraph()
-        run = ph.add_run(source_name)
-        run.bold = True
-        run.font.name  = "Calibri"
-        run.font.size  = Pt(8.5)
-        run.font.color.rgb = GREY
+        _add_run(ph, source_name, bold=True, size=8.5, color=GREY)
         ph.paragraph_format.space_after = Pt(16)
 
     for i, page_text in enumerate(pages):
         if i > 0:
             sp = doc.add_paragraph()
-            sr = sp.add_run(f"{'─' * 48}  p.{i + 1}")
-            sr.font.name  = "Calibri"
-            sr.font.size  = Pt(7.5)
-            sr.font.color.rgb = GREY
+            _add_run(sp, f"{'─' * 48}  p.{i + 1}", size=7.5, color=GREY)
             sp.paragraph_format.space_before = Pt(14)
             sp.paragraph_format.space_after  = Pt(14)
 
-        # page_text is already paragraph-reflowed (paragraphs separated by \n\n)
         for para_raw in page_text.split("\n\n"):
-            # Flatten any residual single newlines: they are visual line
-            # breaks from columns/decorators — join them as one paragraph
-            para_text = " ".join(
-                ln.strip() for ln in para_raw.splitlines() if ln.strip()
-            )
+            # CJK: lines are already joined without spaces; Latin: join with space
+            lines = [ln.strip() for ln in para_raw.splitlines() if ln.strip()]
+            if not lines:
+                continue
+            joiner = "" if is_cjk else " "
+            para_text = joiner.join(lines)
             if not para_text:
                 continue
 
-            p   = doc.add_paragraph()
-            run = p.add_run(para_text)
-            run.font.name = "Calibri"
-            run.font.size = Pt(11)
-
-            # Heading heuristic: short ALL-CAPS line → bold, larger
+            p = doc.add_paragraph()
             stripped = para_text.strip()
-            if (stripped.isupper() and 3 < len(stripped) < 90
-                    and not stripped.startswith("─")):
-                run.bold      = True
-                run.font.size = Pt(12)
+            is_heading = (stripped.isupper() and 3 < len(stripped) < 90
+                          and not stripped.startswith("─"))
+            size = 12.0 if is_heading else BODY_PT
+            _add_run(p, para_text, bold=is_heading, size=size)
+            if is_heading:
                 p.paragraph_format.space_before = Pt(10)
 
     doc.save(out_path)
@@ -7516,6 +7783,7 @@ class PDFExtractorWizard(tk.Toplevel):
         self._status_lbl.pack(padx=14, pady=(6, 0), anchor="w")
 
     def _build_right(self, p):
+        self._right_frame = p   # keep ref for QC panel
         nav = tk.Frame(p, bg=BG)
         nav.pack(fill="x", padx=12, pady=(10, 4))
         tk.Label(nav, text=_t("pdf.preview"), bg=BG, fg=FG2,
@@ -7538,8 +7806,9 @@ class PDFExtractorWizard(tk.Toplevel):
         tf.pack(fill="both", expand=True, padx=12, pady=(0, 12))
         ysb = tk.Scrollbar(tf, orient="vertical",   bg=BG2)
         xsb = tk.Scrollbar(tf, orient="horizontal", bg=BG2)
+        _preview_font = (_pick_preview_font(), 10)
         self._txt = tk.Text(tf, bg=BG3, fg=FG, insertbackground=FG,
-                            font=("Courier New", 10), relief="flat", bd=6,
+                            font=_preview_font, relief="flat", bd=6,
                             wrap="none",
                             yscrollcommand=ysb.set,
                             xscrollcommand=xsb.set)
@@ -7630,6 +7899,60 @@ class PDFExtractorWizard(tk.Toplevel):
         total_p = sum(len(v) for v in results.values())
         self._status_lbl.config(
             text=_t("pdf.done", n=len(results), p=total_p), fg=FG_GREEN)
+        self._show_qc(results)
+
+    # ── QC panel ──────────────────────────────────────────────────────────────
+    def _show_qc(self, results: dict):
+        """Build / rebuild the QC strip below the text preview."""
+        # Remove old QC frame if present
+        if hasattr(self, "_qc_frame") and self._qc_frame.winfo_exists():
+            self._qc_frame.destroy()
+
+        qf = tk.Frame(self._right_frame, bg=BG2)
+        qf.pack(fill="x", padx=12, pady=(0, 10))
+        self._qc_frame = qf
+
+        tk.Label(qf, text="QC", bg=BG2, fg=FG2,
+                 font=("Segoe UI", 7, "bold")).pack(side="left", padx=(8, 4))
+
+        has_issue = False
+        for path, pages in results.items():
+            report = _pdf_qc_check(pages)
+            fname  = os.path.basename(path)
+            bad_pages = [r for r in report if not r["ok"]]
+            ok_pages  = [r for r in report if r["ok"]]
+
+            # Compact summary dot
+            dot_color = FG_GREEN if not bad_pages else FG_RED
+            dot_tip    = fname
+            if bad_pages:
+                has_issue = True
+                dot_tip  += "  ⚠ p." + ", ".join(
+                    str(r["page"]) for r in bad_pages[:8])
+
+            dot = tk.Label(qf, text="●", bg=BG2, fg=dot_color,
+                           font=("Segoe UI", 9), cursor="hand2")
+            dot.pack(side="left", padx=2)
+
+            # Hover tooltip
+            def _enter(e, tip=dot_tip, lbl=dot):
+                lbl.config(text=f"● {tip}")
+            def _leave(e, lbl=dot):
+                lbl.config(text="●")
+            dot.bind("<Enter>", _enter)
+            dot.bind("<Leave>", _leave)
+
+            # Detailed issues: show as compact text
+            if bad_pages:
+                issues_txt = "  ".join(
+                    f"p{r['page']}:{''.join(r['issues'])}" for r in bad_pages[:5]
+                )
+                tk.Label(qf, text=issues_txt, bg=BG2, fg=FG_RED,
+                         font=("Segoe UI", 7)).pack(side="left", padx=(2, 8))
+
+        if not has_issue:
+            tk.Label(qf, text="✓ Aucun problème détecté", bg=BG2, fg=FG_GREEN,
+                     font=("Segoe UI", 7)).pack(side="left", padx=4)
 
     # ── Preview ───────────────────────────────────────────────────────────────
     def _show_page(self):
