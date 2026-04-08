@@ -3,7 +3,7 @@
 #  Python 3 + tkinter + Pillow
 # =============================================================================
 
-import os, re, sys, shutil, threading, struct, zlib, json, subprocess
+import os, re, sys, threading, json, subprocess
 import concurrent.futures as _futures
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
@@ -1037,14 +1037,14 @@ class ImagePreviewPane(tk.Frame):
         self._after_id = None
         if self._src_img is None:
             return
-        import io, threading
+        import threading
         def worker():
             try:
                 result_img, info_str = render_fn(self._src_img.copy(), self._src_path)
                 self.after(0, lambda: self._apply(result_img, info_str))
             except Exception as e:
-                self.after(0, lambda: self._info_new.config(
-                    text=f"Error: {e}", fg=FG_RED))
+                self.after(0, lambda _e=e: self._info_new.config(
+                    text=f"Error: {_e}", fg=FG_RED))
         threading.Thread(target=worker, daemon=True).start()
 
     def _apply(self, result_img, info_str):
@@ -2178,7 +2178,6 @@ class ColorPickerDialog(tk.Toplevel):
         self.update_idletasks()
         pw = parent.winfo_rootx()
         py = parent.winfo_rooty()
-        w, h_win = self.winfo_reqwidth(), self.winfo_reqheight()
         self.geometry(f"+{pw + 60}+{py + 40}")
 
     # ── Build ─────────────────────────────────────────────────────────────────
@@ -4497,8 +4496,6 @@ class ImageGenWizard(tk.Toplevel):
         """Update the step-6 summary text and trigger the side preview."""
         nums = _parse_num_list(self._num_list.get())
         n  = len(nums)
-        nf = nums[0] if nums else 1
-        nt = nums[-1] if nums else 1
         corners_txt = (_t("s5.rounded_r", r=self._radius.get()) if self._corner.get() == "rounded"
                        else _t("s5.sharp"))
         bg_txt = ("Image" if self._bg_mode.get() == "image"
@@ -6883,7 +6880,6 @@ class GuideMarkWizard(tk.Toplevel):
         def mm2px(mm): return round(mm / 25.4 * dpi)
 
         PW, PH = mm2px(pw_mm), mm2px(ph_mm)
-        margin = mm2px(self._margin.get())
         gap    = mm2px(self._gap.get())
         tw     = mm2px(self._tile_w.get())
         th     = mm2px(self._tile_h.get())
@@ -7236,7 +7232,6 @@ class HomeScreen(tk.Tk):
 # =============================================================================
 if __name__ == "__main__":
     if not PILLOW_OK:
-        import subprocess
         subprocess.check_call([sys.executable, "-m", "pip", "install", "Pillow", "-q"])
         from PIL import Image
     app = HomeScreen()
