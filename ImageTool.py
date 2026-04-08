@@ -7115,93 +7115,129 @@ def _pdf_extract_file(path: str, col_detect: bool,
 
 
 def _pdf_page_text(page, col_detect: bool) -> str:
-    """Extract text from one pdfplumber page, preserving spatial layout."""
-    # pdfplumber's layout=True mode uses character positions — best for accuracy
-    try:
-        text = page.extract_text(layout=True)
-        if text and text.strip():
-            return _clean_whitespace(text)
-    except Exception:
-        pass
-    # Fallback: word-level reconstruction
+    """Extract text from one pdfplumber page with paragraph reflow."""
     words = page.extract_words(x_tolerance=3, y_tolerance=3,
                                 keep_blank_chars=False)
+    if words:
+        return _reflow_words(words, float(page.width), col_detect)
+    # Fallback: raw extract_text (no layout, just flow)
+    try:
+        t = (page.extract_text() or "").strip()
+        # Collapse > 2 consecutive blank lines
+        out, blanks = [], 0
+        for ln in t.splitlines():
+            if ln.strip():
+                blanks = 0
+                out.append(ln.rstrip())
+            else:
+                blanks += 1
+                if blanks <= 2:
+                    out.append("")
+        return "\n".join(out)
+    except Exception:
+        return ""
+
+
+def _reflow_words(words: list, page_width: float, col_detect: bool) -> str:
+    """
+    Reconstruct readable paragraphs from PDF word positions.
+
+    1. Group words into visual lines by Y proximity.
+    2. Compute median inter-line gap → derive paragraph-break threshold.
+    3. Lines separated by > threshold → separate paragraph.
+    4. Lines in the same paragraph → joined with a space (sentence reflow).
+    5. Optional: detect two-column layout, process each side separately.
+    """
     if not words:
         return ""
-    return _words_to_text(words, float(page.width), col_detect)
 
+    Y_TOL = 5           # pt — vertical tolerance for same-line grouping
 
-def _clean_whitespace(text: str) -> str:
-    """Collapse runs of 3+ blank lines to at most 2."""
-    lines = text.splitlines()
-    out, blanks = [], 0
-    for ln in lines:
-        if ln.strip():
-            blanks = 0
-            out.append(ln)
-        else:
-            blanks += 1
-            if blanks <= 2:
-                out.append("")
-    return "\n".join(out)
-
-
-def _words_to_text(words: list, page_width: float, col_detect: bool) -> str:
-    """Reconstruct text from word dicts (each has x0, top, x1, bottom, text)."""
-    if not words:
-        return ""
-    Y_TOL = 4        # pt: words within this vertical distance are one line
-    COL_GAP = page_width * 0.09   # minimum gap to consider two columns
-
-    # ── Optional column split ─────────────────────────────────────────────────
+    # ── Optional two-column detection ────────────────────────────────────────
     mid = None
-    if col_detect and len(words) > 10:
+    if col_detect and len(words) > 20:
+        COL_GAP_MIN = page_width * 0.10
         xs = sorted(w["x1"] for w in words)
-        max_gap, gap_mid = 0, 0
+        max_gap, gap_mid = 0.0, 0.0
         for i in range(len(xs) - 1):
             g = xs[i + 1] - xs[i]
             if g > max_gap:
                 max_gap = g
                 gap_mid = (xs[i] + xs[i + 1]) / 2
-        if max_gap >= COL_GAP:
+        if max_gap >= COL_GAP_MIN:
             mid = gap_mid
 
     if mid is not None:
-        left  = _lines_from_words([w for w in words if w["x1"] <= mid],  Y_TOL)
-        right = _lines_from_words([w for w in words if w["x0"] >= mid], Y_TOL)
-        if right.strip():
-            return left + "\n\n── ── ── ──\n\n" + right
-        return left
-    return _lines_from_words(words, Y_TOL)
+        left_txt  = _reflow_column([w for w in words if w["x1"] <= mid],  Y_TOL)
+        right_txt = _reflow_column([w for w in words if w["x0"] >= mid], Y_TOL)
+        if right_txt.strip():
+            return left_txt + "\n\n── ── ── ──\n\n" + right_txt
+        return left_txt
+    return _reflow_column(words, Y_TOL)
 
 
-def _lines_from_words(words: list, y_tol: float) -> str:
-    """Group word dicts into lines sorted by Y then X, return as string."""
+def _group_into_lines(words: list, y_tol: float) -> list:
+    """Cluster words into visual lines. Returns list of (avg_top, [word,...])."""
     if not words:
-        return ""
-    # Sort: bucket by rounded Y (line), then sort by X within each line
-    sorted_w = sorted(words,
-                      key=lambda w: (round(w["top"] / y_tol), w["x0"]))
-    lines, cur, last_top = [], [], None
+        return []
+    sorted_w = sorted(words, key=lambda w: (w["top"], w["x0"]))
+    lines: list = []
+    cur_top = sorted_w[0]["top"]
+    cur: list = []
     for w in sorted_w:
-        if last_top is None or abs(w["top"] - last_top) <= y_tol:
+        if abs(w["top"] - cur_top) <= y_tol:
             cur.append(w)
-            last_top = w["top"] if last_top is None else (last_top + w["top"]) / 2
+            # Keep a running average so a tall word doesn't drift the bucket
+            cur_top = sum(x["top"] for x in cur) / len(cur)
         else:
-            lines.append(cur)
+            lines.append((cur_top, cur))
             cur = [w]
-            last_top = w["top"]
+            cur_top = w["top"]
     if cur:
-        lines.append(cur)
+        lines.append((cur_top, cur))
+    return lines
 
-    out, prev_bot = [], None
-    for line in lines:
-        top = min(w["top"] for w in line)
-        if prev_bot is not None and (top - prev_bot) > 14:
-            out.append("")          # paragraph gap
-        out.append(" ".join(w["text"] for w in sorted(line, key=lambda w: w["x0"])))
-        prev_bot = max(w["bottom"] for w in line)
-    return "\n".join(out)
+
+def _reflow_column(words: list, y_tol: float) -> str:
+    """Group words → visual lines → reflow into paragraphs."""
+    lines = _group_into_lines(words, y_tol)
+    if not lines:
+        return ""
+
+    # Median inter-line gap → paragraph threshold
+    tops = [t for t, _ in lines]
+    if len(tops) >= 2:
+        raw_gaps = [tops[i + 1] - tops[i]
+                    for i in range(len(tops) - 1)
+                    if tops[i + 1] > tops[i]]
+        raw_gaps.sort()
+        median_gap = raw_gaps[len(raw_gaps) // 2] if raw_gaps else 14.0
+    else:
+        median_gap = 14.0
+
+    PARA_THRESH = median_gap * 1.45   # gap > this = new paragraph
+
+    paragraphs: list = []
+    cur_lines:  list = []
+    prev_top = None
+
+    for top, ws in lines:
+        line_text = " ".join(
+            w["text"] for w in sorted(ws, key=lambda w: w["x0"])
+        ).strip()
+        if not line_text:
+            continue
+        if prev_top is not None and (top - prev_top) > PARA_THRESH:
+            if cur_lines:
+                paragraphs.append(" ".join(cur_lines))
+                cur_lines = []
+        cur_lines.append(line_text)
+        prev_top = top
+
+    if cur_lines:
+        paragraphs.append(" ".join(cur_lines))
+
+    return "\n\n".join(paragraphs)
 
 
 def _pdf_export_txt(pages: list, out_path: str):
@@ -7213,51 +7249,68 @@ def _pdf_export_txt(pages: list, out_path: str):
 def _pdf_export_docx(pages: list, out_path: str, source_name: str = ""):
     from docx import Document
     from docx.shared import Pt, Cm, RGBColor
-    from docx.oxml.ns import qn
-    import docx.oxml as _oxml
+    from docx.enum.text import WD_LINE_SPACING  # noqa: F401
 
     doc = Document()
     sec = doc.sections[0]
     sec.top_margin    = Cm(2.5)
     sec.bottom_margin = Cm(2.5)
-    sec.left_margin   = Cm(3.0)
-    sec.right_margin  = Cm(3.0)
+    sec.left_margin   = Cm(2.5)
+    sec.right_margin  = Cm(2.5)
 
-    GREY = RGBColor(0x78, 0x78, 0xa8)
+    # Set Normal style defaults: Calibri 11pt, 1.15 line spacing, 8pt after
+    normal = doc.styles["Normal"]
+    normal.font.name = "Calibri"
+    normal.font.size = Pt(11)
+    normal.paragraph_format.space_after  = Pt(8)
+    normal.paragraph_format.space_before = Pt(0)
+    normal.paragraph_format.line_spacing_rule = WD_LINE_SPACING.MULTIPLE
+    normal.paragraph_format.line_spacing = 1.15
 
-    # Source file header
+    GREY = RGBColor(0x99, 0x99, 0xbb)
+
+    # Source file name as small header
     if source_name:
         ph = doc.add_paragraph()
         run = ph.add_run(source_name)
         run.bold = True
-        run.font.size = Pt(8)
+        run.font.name  = "Calibri"
+        run.font.size  = Pt(8.5)
         run.font.color.rgb = GREY
-        ph.paragraph_format.space_after = Pt(10)
+        ph.paragraph_format.space_after = Pt(16)
 
     for i, page_text in enumerate(pages):
         if i > 0:
-            # Page separator paragraph
             sp = doc.add_paragraph()
-            sr = sp.add_run(f"{'─' * 50}  p.{i + 1}")
-            sr.font.size = Pt(7)
+            sr = sp.add_run(f"{'─' * 48}  p.{i + 1}")
+            sr.font.name  = "Calibri"
+            sr.font.size  = Pt(7.5)
             sr.font.color.rgb = GREY
-            sp.paragraph_format.space_before = Pt(6)
-            sp.paragraph_format.space_after  = Pt(6)
+            sp.paragraph_format.space_before = Pt(14)
+            sp.paragraph_format.space_after  = Pt(14)
 
-        for line in page_text.splitlines():
-            p = doc.add_paragraph()
-            p.paragraph_format.space_before = Pt(0)
-            p.paragraph_format.space_after  = Pt(1)
-            if line.strip():
-                run = p.add_run(line)
-                run.font.size = Pt(10.5)
-                # Simple heuristic: all-caps short line → bold heading
-                stripped = line.strip()
-                if (stripped.isupper() and 2 < len(stripped) < 80
-                        and not stripped.startswith("─")):
-                    run.bold = True
-                    run.font.size = Pt(11)
-            # else: empty paragraph = blank line (paragraph break)
+        # page_text is already paragraph-reflowed (paragraphs separated by \n\n)
+        for para_raw in page_text.split("\n\n"):
+            # Flatten any residual single newlines: they are visual line
+            # breaks from columns/decorators — join them as one paragraph
+            para_text = " ".join(
+                ln.strip() for ln in para_raw.splitlines() if ln.strip()
+            )
+            if not para_text:
+                continue
+
+            p   = doc.add_paragraph()
+            run = p.add_run(para_text)
+            run.font.name = "Calibri"
+            run.font.size = Pt(11)
+
+            # Heading heuristic: short ALL-CAPS line → bold, larger
+            stripped = para_text.strip()
+            if (stripped.isupper() and 3 < len(stripped) < 90
+                    and not stripped.startswith("─")):
+                run.bold      = True
+                run.font.size = Pt(12)
+                p.paragraph_format.space_before = Pt(10)
 
     doc.save(out_path)
 
