@@ -225,7 +225,7 @@ _STRINGS: dict = {
         "fpd.cancel":     "✕  Cancel",
         # HomeScreen
         "home.sub":       "Professional image workflow suite  ·  v2.0",
-        "home.pills":     ["7 tools", "Batch", "Live preview", "100% local"],
+        "home.pills":     ["8 tools", "Batch", "Live preview", "100% local"],
         "home.tools":     "TOOLS",
         "home.adv":       "ADVANCED",
         "home.pipeline":  "▶  Pipeline",
@@ -332,6 +332,25 @@ _STRINGS: dict = {
         "gmw.advanced":       "Advanced",
         "gmw.tile_preview_num": "Preview n\u00b0 :",
         "home.gmw_d":     "Arrange numbered images for print — auto-layout, PDF/PNG export",
+        # PDFExtractorWizard
+        "pdf.title":      "PDF — Text Extractor",
+        "pdf.files":      "━  PDF Files",
+        "pdf.add":        "➕  Add PDF files…",
+        "pdf.remove":     "✕ Remove",
+        "pdf.options":    "━  Options",
+        "pdf.format":     "Format :",
+        "pdf.cols":       "Auto column detection",
+        "pdf.pages":      "Pages :",
+        "pdf.pages_hint": "e.g. 1-5, 8",
+        "pdf.outdir":     "Output folder :",
+        "pdf.extract":    "▶  Extract",
+        "pdf.export":     "💾  Export",
+        "pdf.preview":    "Preview — page :",
+        "pdf.installing": "Installing pdfplumber…",
+        "pdf.extracting": "Extracting…",
+        "pdf.done":       "✓  {n} file(s) — {p} page(s) extracted.",
+        "pdf.words":      "{w} words  ·  {c} chars",
+        "home.pdf_d":     "Extract text from PDF — layout-aware, export TXT / Word",
     },
     "ja": {
         # ImageGenWizard
@@ -453,7 +472,7 @@ _STRINGS: dict = {
         "fpd.cancel":     "✕  キャンセル",
         # HomeScreen
         "home.sub":       "プロ向け画像ワークフロースイート  ·  v2.0",
-        "home.pills":     ["7 ツール", "バッチ", "ライブプレビュー", "100% ローカル"],
+        "home.pills":     ["8 ツール", "バッチ", "ライブプレビュー", "100% ローカル"],
         "home.tools":     "ツール",
         "home.adv":       "上級",
         "home.pipeline":  "▶  パイプライン",
@@ -560,6 +579,25 @@ _STRINGS: dict = {
         "gmw.advanced":       "詳細設定",
         "gmw.tile_preview_num": "プレビュー番号 :",
         "home.gmw_d":     "番号画像を印刷用に自動配置 — PDF/PNG エクスポート",
+        # PDFExtractorWizard
+        "pdf.title":      "PDF — テキスト抽出",
+        "pdf.files":      "━  PDFファイル",
+        "pdf.add":        "➕  PDFを追加…",
+        "pdf.remove":     "✕ 削除",
+        "pdf.options":    "━  オプション",
+        "pdf.format":     "形式 :",
+        "pdf.cols":       "段組み自動検出",
+        "pdf.pages":      "ページ :",
+        "pdf.pages_hint": "例: 1-5, 8",
+        "pdf.outdir":     "出力フォルダ :",
+        "pdf.extract":    "▶  抽出",
+        "pdf.export":     "💾  エクスポート",
+        "pdf.preview":    "プレビュー — ページ :",
+        "pdf.installing": "pdfplumber をインストール中…",
+        "pdf.extracting": "抽出中…",
+        "pdf.done":       "✓  {n} ファイル — {p} ページ抽出完了",
+        "pdf.words":      "{w} 語  ·  {c} 文字",
+        "home.pdf_d":     "PDFからテキスト抽出 — レイアウト対応、TXT/Word エクスポート",
     },
 }
 
@@ -7036,6 +7074,549 @@ class GuideMarkWizard(tk.Toplevel):
             os.startfile(tmp.name, "print")
         except Exception as e:
             messagebox.showerror("Print error", str(e), parent=self)
+
+# =============================================================================
+#  PDF TEXT EXTRACTOR  — helpers
+# =============================================================================
+def _ensure_pdf_deps() -> tuple:
+    """Return (ok, message). Installs pdfplumber + python-docx if missing."""
+    missing = []
+    try:
+        import pdfplumber as _p  # noqa: F401
+    except ImportError:
+        missing.append("pdfplumber")
+    try:
+        import docx as _d  # noqa: F401
+    except ImportError:
+        missing.append("python-docx")
+    if not missing:
+        return True, ""
+    try:
+        subprocess.check_call(
+            [sys.executable, "-m", "pip", "install"] + missing + ["-q"])
+        return True, ""
+    except Exception as e:
+        return False, str(e)
+
+
+def _pdf_extract_file(path: str, col_detect: bool,
+                      page_nums: list | None) -> list:
+    """Extract text from a PDF file. Returns list[str], one entry per page."""
+    import pdfplumber
+    result = []
+    with pdfplumber.open(path) as pdf:
+        total = len(pdf.pages)
+        indices = ([i - 1 for i in page_nums if 1 <= i <= total]
+                   if page_nums else list(range(total)))
+        for idx in indices:
+            page = pdf.pages[idx]
+            result.append(_pdf_page_text(page, col_detect))
+    return result
+
+
+def _pdf_page_text(page, col_detect: bool) -> str:
+    """Extract text from one pdfplumber page, preserving spatial layout."""
+    # pdfplumber's layout=True mode uses character positions — best for accuracy
+    try:
+        text = page.extract_text(layout=True)
+        if text and text.strip():
+            return _clean_whitespace(text)
+    except Exception:
+        pass
+    # Fallback: word-level reconstruction
+    words = page.extract_words(x_tolerance=3, y_tolerance=3,
+                                keep_blank_chars=False)
+    if not words:
+        return ""
+    return _words_to_text(words, float(page.width), col_detect)
+
+
+def _clean_whitespace(text: str) -> str:
+    """Collapse runs of 3+ blank lines to at most 2."""
+    lines = text.splitlines()
+    out, blanks = [], 0
+    for ln in lines:
+        if ln.strip():
+            blanks = 0
+            out.append(ln)
+        else:
+            blanks += 1
+            if blanks <= 2:
+                out.append("")
+    return "\n".join(out)
+
+
+def _words_to_text(words: list, page_width: float, col_detect: bool) -> str:
+    """Reconstruct text from word dicts (each has x0, top, x1, bottom, text)."""
+    if not words:
+        return ""
+    Y_TOL = 4        # pt: words within this vertical distance are one line
+    COL_GAP = page_width * 0.09   # minimum gap to consider two columns
+
+    # ── Optional column split ─────────────────────────────────────────────────
+    mid = None
+    if col_detect and len(words) > 10:
+        xs = sorted(w["x1"] for w in words)
+        max_gap, gap_mid = 0, 0
+        for i in range(len(xs) - 1):
+            g = xs[i + 1] - xs[i]
+            if g > max_gap:
+                max_gap = g
+                gap_mid = (xs[i] + xs[i + 1]) / 2
+        if max_gap >= COL_GAP:
+            mid = gap_mid
+
+    if mid is not None:
+        left  = _lines_from_words([w for w in words if w["x1"] <= mid],  Y_TOL)
+        right = _lines_from_words([w for w in words if w["x0"] >= mid], Y_TOL)
+        if right.strip():
+            return left + "\n\n── ── ── ──\n\n" + right
+        return left
+    return _lines_from_words(words, Y_TOL)
+
+
+def _lines_from_words(words: list, y_tol: float) -> str:
+    """Group word dicts into lines sorted by Y then X, return as string."""
+    if not words:
+        return ""
+    # Sort: bucket by rounded Y (line), then sort by X within each line
+    sorted_w = sorted(words,
+                      key=lambda w: (round(w["top"] / y_tol), w["x0"]))
+    lines, cur, last_top = [], [], None
+    for w in sorted_w:
+        if last_top is None or abs(w["top"] - last_top) <= y_tol:
+            cur.append(w)
+            last_top = w["top"] if last_top is None else (last_top + w["top"]) / 2
+        else:
+            lines.append(cur)
+            cur = [w]
+            last_top = w["top"]
+    if cur:
+        lines.append(cur)
+
+    out, prev_bot = [], None
+    for line in lines:
+        top = min(w["top"] for w in line)
+        if prev_bot is not None and (top - prev_bot) > 14:
+            out.append("")          # paragraph gap
+        out.append(" ".join(w["text"] for w in sorted(line, key=lambda w: w["x0"])))
+        prev_bot = max(w["bottom"] for w in line)
+    return "\n".join(out)
+
+
+def _pdf_export_txt(pages: list, out_path: str):
+    sep = "\n\n" + "═" * 62 + "  [page break]  " + "═" * 4 + "\n\n"
+    with open(out_path, "w", encoding="utf-8") as f:
+        f.write(sep.join(pages))
+
+
+def _pdf_export_docx(pages: list, out_path: str, source_name: str = ""):
+    from docx import Document
+    from docx.shared import Pt, Cm, RGBColor
+    from docx.oxml.ns import qn
+    import docx.oxml as _oxml
+
+    doc = Document()
+    sec = doc.sections[0]
+    sec.top_margin    = Cm(2.5)
+    sec.bottom_margin = Cm(2.5)
+    sec.left_margin   = Cm(3.0)
+    sec.right_margin  = Cm(3.0)
+
+    GREY = RGBColor(0x78, 0x78, 0xa8)
+
+    # Source file header
+    if source_name:
+        ph = doc.add_paragraph()
+        run = ph.add_run(source_name)
+        run.bold = True
+        run.font.size = Pt(8)
+        run.font.color.rgb = GREY
+        ph.paragraph_format.space_after = Pt(10)
+
+    for i, page_text in enumerate(pages):
+        if i > 0:
+            # Page separator paragraph
+            sp = doc.add_paragraph()
+            sr = sp.add_run(f"{'─' * 50}  p.{i + 1}")
+            sr.font.size = Pt(7)
+            sr.font.color.rgb = GREY
+            sp.paragraph_format.space_before = Pt(6)
+            sp.paragraph_format.space_after  = Pt(6)
+
+        for line in page_text.splitlines():
+            p = doc.add_paragraph()
+            p.paragraph_format.space_before = Pt(0)
+            p.paragraph_format.space_after  = Pt(1)
+            if line.strip():
+                run = p.add_run(line)
+                run.font.size = Pt(10.5)
+                # Simple heuristic: all-caps short line → bold heading
+                stripped = line.strip()
+                if (stripped.isupper() and 2 < len(stripped) < 80
+                        and not stripped.startswith("─")):
+                    run.bold = True
+                    run.font.size = Pt(11)
+            # else: empty paragraph = blank line (paragraph break)
+
+    doc.save(out_path)
+
+
+def _parse_page_range_str(raw: str, total: int) -> list | None:
+    """Parse '1-5, 8' → [1,3,4,5,8]. Returns None if raw is empty (=all)."""
+    raw = raw.strip()
+    if not raw:
+        return None
+    pages = set()
+    for part in raw.split(","):
+        part = part.strip()
+        if "-" in part:
+            a, _, b = part.partition("-")
+            try:
+                pages.update(range(int(a), int(b) + 1))
+            except ValueError:
+                pass
+        else:
+            try:
+                pages.add(int(part))
+            except ValueError:
+                pass
+    return sorted(p for p in pages if 1 <= p <= total) or None
+
+
+# =============================================================================
+#  PDF TEXT EXTRACTOR  — wizard UI
+# =============================================================================
+class PDFExtractorWizard(tk.Toplevel):
+    """Extract and export text from PDF files with layout preservation."""
+    WIN_W, WIN_H = 1000, 680
+
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.title(_t("pdf.title"))
+        self.configure(bg=BG)
+        self.resizable(True, True)
+        self.minsize(760, 500)
+
+        self._pdf_paths:  list = []
+        self._extracted:  dict = {}   # path → list[str]  (one str per page)
+        self._current_path   = ""
+        self._total_pages    = 0
+        self._cur_page       = tk.IntVar(value=1)
+        self._out_dir        = tk.StringVar(value=str(DESKTOP))
+        self._out_fmt        = tk.StringVar(value="docx")
+        self._col_detect     = tk.BooleanVar(value=True)
+        self._page_range_str = tk.StringVar(value="")
+
+        self._build()
+        self.update_idletasks()
+        pw = parent.winfo_rootx(); py = parent.winfo_rooty()
+        pw2 = parent.winfo_width();  ph2 = parent.winfo_height()
+        w, h = self.WIN_W, self.WIN_H
+        self.geometry(f"{w}x{h}+{pw + (pw2 - w)//2}+{py + (ph2 - h)//2}")
+
+    # ── Build ─────────────────────────────────────────────────────────────────
+    def _build(self):
+        pw = tk.PanedWindow(self, orient="horizontal", bg=BG,
+                            sashwidth=5, sashrelief="flat", handlesize=0)
+        pw.pack(fill="both", expand=True)
+
+        left = tk.Frame(pw, bg=BG2, width=290)
+        left.pack_propagate(False)
+        pw.add(left, minsize=230)
+
+        right = tk.Frame(pw, bg=BG)
+        pw.add(right, minsize=420)
+
+        self._build_left(left)
+        self._build_right(right)
+
+    def _build_left(self, p):
+        def sec(txt):
+            tk.Label(p, text=txt, bg=BG2, fg=FG2,
+                     font=("Segoe UI", 8, "bold")).pack(
+                anchor="w", padx=14, pady=(12, 3))
+
+        def row(lbl, fn, lw=13):
+            r = tk.Frame(p, bg=BG2)
+            r.pack(fill="x", padx=14, pady=3)
+            if lbl:
+                tk.Label(r, text=lbl, bg=BG2, fg=FG, font=FONT_SM,
+                         width=lw, anchor="e").pack(side="left", padx=(0, 6))
+            fn(r)
+
+        # ── Files ────────────────────────────────────────────────────────
+        sec(_t("pdf.files"))
+
+        drop = tk.Frame(p, bg=BG3, cursor="hand2")
+        drop.pack(fill="x", padx=12, pady=(0, 4))
+        drop_lbl = tk.Label(drop, text=_t("pdf.add"), bg=BG3, fg=FG2,
+                             font=FONT_SM, pady=12)
+        drop_lbl.pack()
+        for w in (drop, drop_lbl):
+            w.bind("<Button-1>", lambda e: self._add_files())
+
+        lf = tk.Frame(p, bg=BG2)
+        lf.pack(fill="x", padx=12, pady=(0, 2))
+        self._file_lb = tk.Listbox(lf, bg=BG3, fg=FG, font=FONT_SM,
+                                   selectbackground=ACCENT, selectforeground=FG,
+                                   relief="flat", bd=0, height=5,
+                                   activestyle="none")
+        self._file_lb.pack(fill="x")
+        self._file_lb.bind("<<ListboxSelect>>", self._on_file_select)
+
+        br = tk.Frame(p, bg=BG2)
+        br.pack(fill="x", padx=12, pady=(0, 4))
+        tk.Button(br, text=_t("pdf.remove"), command=self._remove_file,
+                  bg=BG3, fg=FG2, relief="flat", font=FONT_SM,
+                  cursor="hand2").pack(side="left")
+
+        # ── Options ──────────────────────────────────────────────────────
+        sec(_t("pdf.options"))
+
+        def _fmt_row(r):
+            for val, lbl in (("docx", "Word (.docx)"), ("txt", "Texte (.txt)")):
+                tk.Radiobutton(r, text=lbl, variable=self._out_fmt, value=val,
+                               bg=BG2, fg=FG, selectcolor=BG3,
+                               activebackground=BG2,
+                               font=FONT_SM).pack(side="left", padx=(0, 8))
+        row(_t("pdf.format"), _fmt_row, lw=9)
+
+        def _col_row(r):
+            tk.Checkbutton(r, text=_t("pdf.cols"), variable=self._col_detect,
+                           bg=BG2, fg=FG, selectcolor=BG3,
+                           activebackground=BG2,
+                           font=FONT_SM).pack(side="left")
+        row("", _col_row, lw=0)
+
+        def _pg_row(r):
+            tk.Entry(r, textvariable=self._page_range_str, bg=BG3, fg=FG,
+                     insertbackground=FG, relief="flat",
+                     font=FONT_SM, width=14).pack(side="left")
+            tk.Label(r, text=_t("pdf.pages_hint"), bg=BG2, fg=FG2,
+                     font=("Segoe UI", 7)).pack(side="left", padx=4)
+        row(_t("pdf.pages"), _pg_row, lw=9)
+
+        def _dir_row(r):
+            tk.Entry(r, textvariable=self._out_dir, bg=BG3, fg=FG,
+                     insertbackground=FG, relief="flat",
+                     font=FONT_SM, width=14).pack(side="left", fill="x",
+                                                  expand=True)
+            tk.Button(r, text="…", command=self._pick_dir,
+                      bg=BG3, fg=FG, relief="flat", font=FONT_SM,
+                      cursor="hand2").pack(side="left", padx=(4, 0))
+        row(_t("pdf.outdir"), _dir_row, lw=9)
+
+        # ── Actions ──────────────────────────────────────────────────────
+        tk.Frame(p, bg=BG3, height=1).pack(fill="x", padx=12, pady=(14, 0))
+        af = tk.Frame(p, bg=BG2)
+        af.pack(fill="x", padx=12, pady=10)
+        btn(af, _t("pdf.extract"), self._run_extract,
+            primary=True).pack(fill="x", pady=(0, 6))
+        btn(af, _t("pdf.export"), self._export,
+            primary=False).pack(fill="x")
+
+        self._status_lbl = tk.Label(p, text="", bg=BG2, fg=FG2,
+                                    font=FONT_SM, wraplength=248,
+                                    justify="left")
+        self._status_lbl.pack(padx=14, pady=(6, 0), anchor="w")
+
+    def _build_right(self, p):
+        nav = tk.Frame(p, bg=BG)
+        nav.pack(fill="x", padx=12, pady=(10, 4))
+        tk.Label(nav, text=_t("pdf.preview"), bg=BG, fg=FG2,
+                 font=FONT_SM).pack(side="left")
+        self._btn_prev = tk.Button(nav, text="◀", command=self._prev_page,
+                                   bg=BG3, fg=FG, relief="flat",
+                                   font=FONT_SM, cursor="hand2", padx=6)
+        self._btn_prev.pack(side="left", padx=(8, 2))
+        self._page_lbl = tk.Label(nav, text="—", bg=BG, fg=FG,
+                                   font=FONT_SM, width=9)
+        self._page_lbl.pack(side="left")
+        self._btn_next = tk.Button(nav, text="▶", command=self._next_page,
+                                   bg=BG3, fg=FG, relief="flat",
+                                   font=FONT_SM, cursor="hand2", padx=6)
+        self._btn_next.pack(side="left", padx=(2, 8))
+        self._word_lbl = tk.Label(nav, text="", bg=BG, fg=FG2, font=FONT_SM)
+        self._word_lbl.pack(side="right")
+
+        tf = tk.Frame(p, bg=BG)
+        tf.pack(fill="both", expand=True, padx=12, pady=(0, 12))
+        ysb = tk.Scrollbar(tf, orient="vertical",   bg=BG2)
+        xsb = tk.Scrollbar(tf, orient="horizontal", bg=BG2)
+        self._txt = tk.Text(tf, bg=BG3, fg=FG, insertbackground=FG,
+                            font=("Courier New", 10), relief="flat", bd=6,
+                            wrap="none",
+                            yscrollcommand=ysb.set,
+                            xscrollcommand=xsb.set)
+        ysb.config(command=self._txt.yview)
+        xsb.config(command=self._txt.xview)
+        ysb.pack(side="right",  fill="y")
+        xsb.pack(side="bottom", fill="x")
+        self._txt.pack(side="left", fill="both", expand=True)
+
+    # ── File management ───────────────────────────────────────────────────────
+    def _add_files(self):
+        paths = filedialog.askopenfilenames(
+            parent=self, title="Sélectionner des PDF",
+            filetypes=[("PDF", "*.pdf *.PDF"), ("All files", "*.*")])
+        for p in paths:
+            p = os.path.normpath(p)
+            if p not in self._pdf_paths:
+                self._pdf_paths.append(p)
+                self._file_lb.insert("end", os.path.basename(p))
+
+    def _remove_file(self):
+        sel = self._file_lb.curselection()
+        if not sel:
+            return
+        idx = sel[0]
+        path = self._pdf_paths.pop(idx)
+        self._file_lb.delete(idx)
+        self._extracted.pop(path, None)
+        if self._current_path == path:
+            self._current_path = ""
+            self._clear_preview()
+
+    def _on_file_select(self, _=None):
+        sel = self._file_lb.curselection()
+        if not sel:
+            return
+        self._current_path = self._pdf_paths[sel[0]]
+        if self._current_path in self._extracted:
+            self._cur_page.set(1)
+            self._show_page()
+        else:
+            self._clear_preview()
+
+    def _pick_dir(self):
+        d = filedialog.askdirectory(parent=self,
+                                    initialdir=self._out_dir.get())
+        if d:
+            self._out_dir.set(d)
+
+    # ── Extraction ────────────────────────────────────────────────────────────
+    def _run_extract(self):
+        if not self._pdf_paths:
+            messagebox.showwarning(_t("pdf.title"),
+                                   "Aucun PDF sélectionné.", parent=self)
+            return
+        self._status_lbl.config(text=_t("pdf.installing"), fg=FG2)
+        self.update_idletasks()
+
+        def _worker():
+            ok, err = _ensure_pdf_deps()
+            if not ok:
+                self.after(0, lambda: self._status_lbl.config(
+                    text=f"Erreur install: {err}", fg=FG_RED))
+                return
+            results = {}
+            self.after(0, lambda: self._status_lbl.config(
+                text=_t("pdf.extracting"), fg=FG2))
+            for path in self._pdf_paths:
+                try:
+                    results[path] = _pdf_extract_file(
+                        path,
+                        col_detect=self._col_detect.get(),
+                        page_nums=None)
+                except Exception as ex:
+                    results[path] = [f"[ERREUR: {ex}]"]
+            self.after(0, lambda r=results: self._on_done(r))
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _on_done(self, results: dict):
+        self._extracted = results
+        if not self._current_path and self._pdf_paths:
+            self._current_path = self._pdf_paths[0]
+            self._file_lb.selection_clear(0, "end")
+            self._file_lb.selection_set(0)
+        self._cur_page.set(1)
+        self._show_page()
+        total_p = sum(len(v) for v in results.values())
+        self._status_lbl.config(
+            text=_t("pdf.done", n=len(results), p=total_p), fg=FG_GREEN)
+
+    # ── Preview ───────────────────────────────────────────────────────────────
+    def _show_page(self):
+        if not self._current_path or self._current_path not in self._extracted:
+            self._clear_preview()
+            return
+        pages = self._extracted[self._current_path]
+        self._total_pages = len(pages)
+        p = max(1, min(self._cur_page.get(), self._total_pages))
+        self._cur_page.set(p)
+        self._page_lbl.config(text=f"{p} / {self._total_pages}")
+        text = pages[p - 1]
+        self._txt.config(state="normal")
+        self._txt.delete("1.0", "end")
+        self._txt.insert("1.0", text)
+        words = len(text.split())
+        chars = len(text.replace("\n", "").replace(" ", ""))
+        self._word_lbl.config(text=_t("pdf.words", w=words, c=chars))
+
+    def _clear_preview(self):
+        self._txt.config(state="normal")
+        self._txt.delete("1.0", "end")
+        self._page_lbl.config(text="—")
+        self._word_lbl.config(text="")
+        self._total_pages = 0
+
+    def _prev_page(self):
+        p = self._cur_page.get() - 1
+        if p >= 1:
+            self._cur_page.set(p)
+            self._show_page()
+
+    def _next_page(self):
+        p = self._cur_page.get() + 1
+        if p <= self._total_pages:
+            self._cur_page.set(p)
+            self._show_page()
+
+    # ── Export ────────────────────────────────────────────────────────────────
+    def _export(self):
+        if not self._extracted:
+            messagebox.showwarning(_t("pdf.title"),
+                                   "Rien à exporter — lancez d'abord l'extraction.",
+                                   parent=self)
+            return
+        out_dir = self._out_dir.get().strip()
+        if not os.path.isdir(out_dir):
+            messagebox.showerror(_t("pdf.title"),
+                                 f"Dossier invalide :\n{out_dir}", parent=self)
+            return
+        fmt        = self._out_fmt.get()
+        exported, errors = [], []
+        for path, pages in self._extracted.items():
+            wanted = _parse_page_range_str(self._page_range_str.get(),
+                                           len(pages))
+            sel = [pages[i - 1] for i in wanted] if wanted else pages
+            stem = os.path.splitext(os.path.basename(path))[0]
+            try:
+                if fmt == "txt":
+                    out = os.path.join(out_dir, f"{stem}.txt")
+                    _pdf_export_txt(sel, out)
+                else:
+                    out = os.path.join(out_dir, f"{stem}.docx")
+                    _pdf_export_docx(sel, out,
+                                     source_name=os.path.basename(path))
+                exported.append(out)
+            except Exception as ex:
+                errors.append(f"{stem}: {ex}")
+
+        msg = f"✓  {len(exported)} fichier(s) exporté(s)."
+        if errors:
+            msg += "\n⚠ " + "\n".join(errors)
+        fg = FG_GREEN if not errors else FG_RED
+        self._status_lbl.config(text=msg, fg=fg)
+        if exported:
+            try:
+                os.startfile(out_dir)
+            except Exception:
+                pass
+
+
 # =============================================================================
 #  HOME SCREEN
 # =============================================================================
@@ -7152,6 +7733,7 @@ class HomeScreen(tk.Tk):
             ("🎨", "Generate",    _t("home.gen_d"),        ImageGenWizard,    "#7c6af7"),
             ("📐", "Guide Mark",  _t("home.gmw_d"),        GuideMarkWizard,   "#2ec4b6"),
             ("📋", "Clipboard",   _t("home.clip_d"),       ClipboardManager,  "#f72585"),
+            ("📄", "PDF Extractor", _t("home.pdf_d"),      PDFExtractorWizard, "#f77f00"),
         ]
         for ico, title, desc, cls, color in tools:
             self._tool_card(ico, title, desc, cls, color)
