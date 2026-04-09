@@ -88,14 +88,14 @@ def _enable_drop(widget, callback):
         pass
 
 # ── Colours & fonts ──────────────────────────────────────────────────────────
-BG           = "#0f0f1c"   # deep navy-black
-BG2          = "#181828"   # card / panel
-BG3          = "#22223a"   # input / sink
-ACCENT       = "#7c6af7"   # primary purple
-ACCENT2      = "#5a4fcf"   # pressed
-ACCENT_LIGHT = "#a89af9"   # hover highlight
-FG           = "#eeeeff"
-FG2          = "#7878a8"
+BG           = "#111111"   # neutral black
+BG2          = "#1c1c1c"   # card / panel
+BG3          = "#262626"   # input / sink
+ACCENT       = "#f77f00"   # Acoustiguide orange
+ACCENT2      = "#d96e00"   # pressed
+ACCENT_LIGHT = "#ff9933"   # hover
+FG           = "#f2f2f2"
+FG2          = "#888888"
 FG_GREEN     = "#6fcf97"
 FG_RED       = "#eb5757"
 FG_YELLOW    = "#f2c94c"
@@ -351,6 +351,33 @@ _STRINGS: dict = {
         "pdf.done":       "✓  {n} file(s) — {p} page(s) extracted.",
         "pdf.words":      "{w} words  ·  {c} chars",
         "home.pdf_d":     "Extract text from PDF — layout-aware, export TXT / Word",
+        # LinkRedirectorWizard
+        "lrw.title":      "Link Redirector",
+        "lrw.desc":       "Short expiring links for PWA demos — Cloudflare Worker",
+        "lrw.tab_create": "Create",
+        "lrw.tab_links":  "My Links",
+        "lrw.tab_deploy": "Deploy",
+        "lrw.url":        "Destination URL *",
+        "lrw.url_hint":   "https://my-pwa.vercel.app",
+        "lrw.expires":    "Expiry date / time",
+        "lrw.max_clicks": "Max clicks",
+        "lrw.max_clicks_hint": "leave blank = unlimited",
+        "lrw.custom":     "Custom code (optional)",
+        "lrw.custom_hint":"e.g. my-project-v2",
+        "lrw.worker_url": "Worker base URL *",
+        "lrw.worker_hint":"https://links.my-domain.workers.dev",
+        "lrw.token":      "Admin token",
+        "lrw.token_hint": "secret configured in Cloudflare",
+        "lrw.generate":   "▶  Generate link",
+        "lrw.open_admin": "🌐  Open admin panel",
+        "lrw.copy":       "Copy",
+        "lrw.copied":     "Copied!",
+        "lrw.refresh":    "↺  Refresh",
+        "lrw.delete":     "✕  Delete",
+        "lrw.no_links":   "No links yet.",
+        "lrw.deploy_title": "How to deploy",
+        "lrw.save_worker":  "💾  Save worker.js",
+        "home.lrw_d":     "Generate & manage expiring short links (Cloudflare Worker)",
     },
     "ja": {
         # ImageGenWizard
@@ -598,6 +625,33 @@ _STRINGS: dict = {
         "pdf.done":       "✓  {n} ファイル — {p} ページ抽出完了",
         "pdf.words":      "{w} 語  ·  {c} 文字",
         "home.pdf_d":     "PDFからテキスト抽出 — レイアウト対応、TXT/Word エクスポート",
+        # LinkRedirectorWizard
+        "lrw.title":      "リンクリダイレクター",
+        "lrw.desc":       "PWAデモ用の期限付き短縮リンク — Cloudflare Worker",
+        "lrw.tab_create": "作成",
+        "lrw.tab_links":  "リンク一覧",
+        "lrw.tab_deploy": "デプロイ",
+        "lrw.url":        "転送先URL *",
+        "lrw.url_hint":   "https://my-pwa.vercel.app",
+        "lrw.expires":    "有効期限",
+        "lrw.max_clicks": "最大クリック数",
+        "lrw.max_clicks_hint": "空欄＝無制限",
+        "lrw.custom":     "カスタムコード（任意）",
+        "lrw.custom_hint":"例: my-project-v2",
+        "lrw.worker_url": "Worker ベースURL *",
+        "lrw.worker_hint":"https://links.my-domain.workers.dev",
+        "lrw.token":      "管理トークン",
+        "lrw.token_hint": "Cloudflareで設定したシークレット",
+        "lrw.generate":   "▶  リンクを生成",
+        "lrw.open_admin": "🌐  管理画面を開く",
+        "lrw.copy":       "コピー",
+        "lrw.copied":     "コピー済み！",
+        "lrw.refresh":    "↺  更新",
+        "lrw.delete":     "✕  削除",
+        "lrw.no_links":   "リンクなし",
+        "lrw.deploy_title": "デプロイ方法",
+        "lrw.save_worker":  "💾  worker.js を保存",
+        "home.lrw_d":     "期限付き短縮リンクの生成・管理（Cloudflare Worker）",
     },
 }
 
@@ -762,7 +816,7 @@ def label(parent, text, font=FONT_BODY, fg=FG, bg=None, **kw):
 
 def btn(parent, text, cmd, primary=True, **kw):
     bg    = ACCENT if primary else BG3
-    hover = ACCENT2 if primary else "#2e2e50"
+    hover = ACCENT2 if primary else "#333333"
     b = tk.Button(parent, text=text, command=cmd,
                   bg=bg, fg=FG, font=FONT_BODY,
                   relief="flat", bd=0, padx=14, pady=7,
@@ -776,6 +830,26 @@ def entry(parent, textvariable=None, width=30, **kw):
     return tk.Entry(parent, textvariable=textvariable, width=width,
                     bg=BG3, fg=FG, insertbackground=FG,
                     relief="flat", font=FONT_BODY, bd=4, **kw)
+
+def _blend_hex(c1, c2, t=0.18):
+    """Blend colour c2 into c1 by factor t (0=all c1, 1=all c2)."""
+    r1,g1,b1 = int(c1[1:3],16), int(c1[3:5],16), int(c1[5:7],16)
+    r2,g2,b2 = int(c2[1:3],16), int(c2[3:5],16), int(c2[5:7],16)
+    r = int(r1*(1-t)+r2*t)
+    g = int(g1*(1-t)+g2*t)
+    b = int(b1*(1-t)+b2*t)
+    return f"#{r:02x}{g:02x}{b:02x}"
+
+def _center_win(win):
+    """Centre a Toplevel (or Tk) on the screen."""
+    win.update_idletasks()
+    w = win.winfo_width()
+    h = win.winfo_height()
+    sw = win.winfo_screenwidth()
+    sh = win.winfo_screenheight()
+    x = max(0, (sw - w) // 2)
+    y = max(0, (sh - h) // 2)
+    win.geometry(f"+{x}+{y}")
 
 def _arrow_scale(sc: "tk.Scale"):
     """Allow arrow-key control on any Scale: click it, then ←/→/↑/↓ steps ±1."""
@@ -2216,7 +2290,7 @@ class ColorPickerDialog(tk.Toplevel):
         self.update_idletasks()
         pw = parent.winfo_rootx()
         py = parent.winfo_rooty()
-        self.geometry(f"+{pw + 60}+{py + 40}")
+        _center_win(self)
 
     # ── Build ─────────────────────────────────────────────────────────────────
     def _build(self):
@@ -2884,7 +2958,8 @@ class FontPreviewDialog(tk.Toplevel):
         pw, py = parent.winfo_rootx(), parent.winfo_rooty()
         pw2, ph2 = parent.winfo_width(), parent.winfo_height()
         w, h = 560, 640
-        self.geometry(f"{w}x{h}+{pw+(pw2-w)//2}+{py+(ph2-h)//2}")
+        self.geometry(f"{w}x{h}")
+        _center_win(self)
         self._rebuild_rows()
 
     def _build(self):
@@ -3108,7 +3183,8 @@ class ImageGenWizard(tk.Toplevel):
 
         self.update_idletasks()
         pw, py = parent.winfo_rootx(), parent.winfo_rooty()
-        self.geometry(f"{self.WIN_W}x{self.WIN_H}+{pw+30}+{py+20}")
+        self.geometry(f"{self.WIN_W}x{self.WIN_H}")
+        _center_win(self)
 
     # ── Scaffold ──────────────────────────────────────────────────────────────
     def _build(self):
@@ -4780,11 +4856,12 @@ class ItemDialog(tk.Toplevel):
 
         self._build(label_val, text_val)
         self.update_idletasks()
-        # Centre on parent
+        # Centre on screen
         pw = parent.winfo_rootx()
         py = parent.winfo_rooty()
         w, h = 460, 340
-        self.geometry(f"{w}x{h}+{pw + 60}+{py + 60}")
+        self.geometry(f"{w}x{h}")
+        _center_win(self)
 
     def _build(self, label_val, text_val):
         pad = dict(padx=20, pady=8)
@@ -4857,7 +4934,8 @@ class ClipboardManager(tk.Toplevel):
         self._refresh_cats()
         self.update_idletasks()
         pw, py = parent.winfo_rootx(), parent.winfo_rooty()
-        self.geometry(f"{self.WIN_W}x{self.WIN_H}+{pw+40}+{py+40}")
+        self.geometry(f"{self.WIN_W}x{self.WIN_H}")
+        _center_win(self)
 
     # ── Layout ────────────────────────────────────────────────────────────────
     def _build(self):
@@ -7101,7 +7179,7 @@ def _ensure_pdf_deps() -> tuple:
 
 def _pdf_extract_file(path: str, col_detect: bool,
                       page_nums: list | None) -> list:
-    """Extract text from a PDF file. Returns list[str], one entry per page."""
+    """Extract text from a PDF file. Returns list[list[dict]], one list of blocks per page."""
     import pdfplumber
     result = []
     with pdfplumber.open(path) as pdf:
@@ -7140,6 +7218,19 @@ def _cjk_ratio(text: str) -> float:
     return sum(1 for c in chars if _is_cjk_char(c)) / len(chars)
 
 
+def _is_hangul_char(c: str) -> bool:
+    o = ord(c)
+    return (0xAC00 <= o <= 0xD7AF) or (0x1100 <= o <= 0x11FF)
+
+
+def _hangul_ratio(text: str) -> float:
+    """Fraction of non-whitespace chars that are Hangul (Korean)."""
+    chars = [c for c in text if not c.isspace()]
+    if not chars:
+        return 0.0
+    return sum(1 for c in chars if _is_hangul_char(c)) / len(chars)
+
+
 def _pick_preview_font() -> str:
     """Best available monospace font that covers CJK + Latin."""
     try:
@@ -7164,37 +7255,112 @@ def _pick_preview_font() -> str:
     return "Courier New"
 
 
-def _pdf_page_text(page, col_detect: bool) -> str:
-    """Extract text from one pdfplumber page — CJK-aware with paragraph reflow."""
-    # ── Latin / spaced scripts: word-level ────────────────────────────────────
+# ── Block helpers (used by extraction layer and exporters) ───────────────────
+
+_LI_STARTERS = frozenset("\u30fb\u25cf\u25cb\u2666\u25a1\u25b2\u25ba\u2192\u2022\u203b\u25c7\u25b6\u25b8\xb7")
+
+
+def _blocks_to_plain(blocks: list) -> str:
+    """Flatten list[dict] blocks to a plain string (for QC / word count)."""
+    parts = []
+    for b in blocks:
+        if b.get("type") == "sep":
+            parts.append("\u2500\u2500 \u2500\u2500 \u2500\u2500")
+        elif b.get("text", "").strip():
+            parts.append(b["text"])
+    return "\n\n".join(parts)
+
+
+def _classify_block(text: str, is_cjk: bool) -> str:
+    """
+    Classify a reflowed paragraph as  h1 / h2 / li / body.
+    Input is an already-isolated paragraph; short = heading is a safe rule.
+    """
+    import re
+    stripped = text.strip()
+    if not stripped:
+        return "body"
+
+    # ── List items (language-agnostic) ────────────────────────────────────────
+    if stripped[0] in _LI_STARTERS:
+        return "li"
+    if re.match(r'^[-\*]\s', stripped):
+        return "li"
+    if re.match(r'^\d+[.\)]\s', stripped):
+        return "li"
+    if re.match(r'^\([0-9]+\)', stripped):
+        return "li"
+    if re.match(r'^[\u2460-\u2473]', stripped):   # ①-⑳
+        return "li"
+
+    if is_cjk:
+        CJK_END = set("\u3002\uff1f\uff01\u2026\u300d\u300f\uff09)")
+        # Explicit chapter / section markers ─────────────────────────────
+        if re.match(r'^\u7b2c[\u4e00\u4e8c\u4e09\u56db\u4e94\u516d\u4e03\u516b\u4e5d\u5341\u767e\d]+[\u7ae0\u90e8\u7bc0\u7de8\u7bc7\u8ab2]', stripped):
+            return "h1"
+        if re.match(r'^\uc81c\s*\d+\s*[\uc7a5\uc808\ud3b8]', stripped, re.IGNORECASE):
+            return "h1"
+        # Numbered section: １、 or 10、 (fullwidth or ASCII digits + 、)
+        if re.match(r'^[\uff10-\uff19\d]+[\u3001\uff0c]', stripped):
+            return "h2"
+        if re.match(r'^[\uff08\(][\u4e00\u4e8c\u4e09\u56db\u4e94\u516d\u4e03\u516b\u4e5d\u5341\d]+[\uff09\)]', stripped):
+            return "h2"
+        if re.match(r'^[\u4e00\u4e8c\u4e09\u56db\u4e94\u516d\u4e03\u516b\u4e5d\u5341][\u3001\.]', stripped):
+            return "h2"
+        if re.match(r'^[\uac00\ub098\ub2e4\ub77c\ub9c8\ubc14\uc0ac\uc544\uc790][.\uff09]', stripped):
+            return "h2"
+        # Short isolated CJK without sentence-end punctuation ─────────────
+        cjk_c  = sum(1 for c in stripped if _is_cjk_char(c))
+        if cjk_c >= len(stripped) * 0.35:
+            has_end = bool(stripped) and stripped[-1] in CJK_END
+            n = len(stripped)
+            if n <= 8  and not has_end: return "h1"
+            if n <= 22 and not has_end: return "h2"
+    else:
+        words_list = stripped.split()
+        has_punct  = stripped[-1] in ".;,!?" if stripped else False
+        if stripped.isupper() and 3 < len(stripped) < 80:
+            return "h1"
+        cap_w = sum(1 for w in words_list if w and w[0].isupper())
+        if (len(words_list) <= 10 and len(stripped) < 80
+                and not has_punct
+                and cap_w >= len(words_list) * 0.6):
+            return "h2"
+
+    return "body"
+
+
+def _block(text: str, is_cjk: bool) -> dict:
+    return {"type": _classify_block(text, is_cjk), "text": text}
+
+
+def _pdf_page_text(page, col_detect: bool) -> list:
+    """Extract text from one pdfplumber page. Returns list[dict] of blocks."""
     words = page.extract_words(x_tolerance=3, y_tolerance=3,
                                 keep_blank_chars=False)
     if words:
-        # Sample the first 200 words to detect CJK
         sample = " ".join(w["text"] for w in words[:200])
         if _cjk_ratio(sample) >= 0.20:
-            # For CJK, words() merges everything into huge tokens → use chars
             return _pdf_page_text_cjk(page)
         return _reflow_words(words, float(page.width), col_detect)
 
-    # ── Fallback: raw extract_text ────────────────────────────────────────────
     try:
         raw = (page.extract_text() or "").strip()
         if _cjk_ratio(raw) >= 0.20:
             return _reflow_cjk_raw(raw)
-        # Latin fallback: collapse blank lines
-        out, blanks = [], 0
+        paragraphs, cur = [], []
         for ln in raw.splitlines():
             if ln.strip():
-                blanks = 0
-                out.append(ln.rstrip())
+                cur.append(ln.strip())
             else:
-                blanks += 1
-                if blanks <= 2:
-                    out.append("")
-        return "\n".join(out)
+                if cur:
+                    paragraphs.append(" ".join(cur))
+                    cur = []
+        if cur:
+            paragraphs.append(" ".join(cur))
+        return [_block(p, False) for p in paragraphs if p.strip()]
     except Exception:
-        return ""
+        return []
 
 
 def _pdf_page_text_cjk(page) -> str:
@@ -7210,27 +7376,23 @@ def _pdf_page_text_cjk(page) -> str:
         raw = page.extract_text() or ""
         return _reflow_cjk_raw(raw)
 
-    # Sort chars: Y bucket → X
+    # Group chars into line buckets by vertical proximity, then sort by x0.
+    # Using a fixed bucket key avoids the drifting-average chaining bug
+    # that would otherwise merge physically separate lines.
     Y_TOL = 4
-    chars_s = sorted(chars, key=lambda c: (round(c["top"] / Y_TOL), c["x0"]))
-
-    # Group into lines
+    _buckets: dict = {}
+    for ch in chars:
+        bk = round(ch["top"] / Y_TOL)
+        if bk not in _buckets:
+            _buckets[bk] = []
+        _buckets[bk].append(ch)
     lines: list = []   # list of (avg_top, text_str, x0_of_first_char)
-    cur_chars: list = []
-    cur_top = chars_s[0]["top"]
-    for ch in chars_s:
-        if abs(ch["top"] - cur_top) <= Y_TOL:
-            cur_chars.append(ch)
-            cur_top = sum(c["top"] for c in cur_chars) / len(cur_chars)
-        else:
-            if cur_chars:
-                txt = "".join(c["text"] for c in cur_chars).strip()
-                lines.append((cur_top, txt, cur_chars[0]["x0"]))
-            cur_chars = [ch]
-            cur_top = ch["top"]
-    if cur_chars:
-        txt = "".join(c["text"] for c in cur_chars).strip()
-        lines.append((cur_top, txt, cur_chars[0]["x0"]))
+    for _bk in sorted(_buckets):
+        _bchars = sorted(_buckets[_bk], key=lambda c: c["x0"])
+        txt = "".join(c["text"] for c in _bchars).strip()
+        avg_top = sum(c["top"] for c in _bchars) / len(_bchars)
+        if txt:
+            lines.append((avg_top, txt, _bchars[0]["x0"]))
 
     return _reflow_cjk_lines(lines, float(page.width))
 
@@ -7241,17 +7403,30 @@ def _reflow_cjk_lines(lines: list, page_width: float) -> str:
     Rules:
       1. Vertical gap > 1.5 × median → new paragraph
       2. Line starts with full-width space 　 or ASCII indent ≥10pt from left_base
-      3. Previous line ends with CJK sentence-end punctuation (。？！…）」』）
+      3. Previous line ends with CJK sentence-end punctuation (。？！…」』)
     """
     if not lines:
         return ""
 
-    CJK_ENDS = set("。？！…」』）)")
+    # Detect script: Korean needs ASCII sentence-end punctuation and space-joining.
+    # Japanese/Chinese use full-width punctuation and need no inter-word space.
+    import re as _re
+    _sample = " ".join(txt for _, txt, _ in lines[:40])
+    _is_korean = _hangul_ratio(_sample) >= 0.35
+
+    # Korean sentences end with ASCII .?!  Japanese/Chinese with 。？！…
+    # Parenthetical ) / ） are NOT sentence enders (already excluded).
+    if _is_korean:
+        CJK_ENDS = set("。？！…」』.?!")
+        JOIN_SEP  = " "   # Korean words are space-separated
+    else:
+        CJK_ENDS = set("。？！…」』")
+        JOIN_SEP  = ""    # Japanese/Chinese: no inter-character space
+
+    # Full-width / ASCII numbered section starters: １、 or 1、 — always begin a new block.
+    _SECTION_RE = _re.compile(r'^[\uff10-\uff19\d]+[\u3001\uff0c]')
 
     tops   = [t for t, _, _ in lines]
-    widths_sorted = sorted(
-        [len(txt) for _, txt, _ in lines if txt], reverse=True
-    )
     # 5th-percentile left margin
     x0s = sorted(x for _, _, x in lines)
     left_base = x0s[max(0, len(x0s) // 20)]
@@ -7282,28 +7457,44 @@ def _reflow_cjk_lines(lines: list, page_width: float) -> str:
                 # full-width space indent OR positional indent
                 is_break = True
             elif prev_text and prev_text[-1] in CJK_ENDS:
-                # previous line ended a CJK sentence
+                # previous line ended a sentence
+                is_break = True
+            elif _SECTION_RE.match(text):
+                # current line starts a numbered section (１、 etc.) → new block
                 is_break = True
         if is_break and cur:
-            paragraphs.append("".join(cur))
+            paragraphs.append(JOIN_SEP.join(cur))
             cur = []
-        # CJK: no space between lines of same paragraph
         cur.append(text)
+        # Section title line → flush it immediately as its own block
+        # so the next line always starts a fresh paragraph.
+        if _SECTION_RE.match(text):
+            paragraphs.append(JOIN_SEP.join(cur))
+            cur = []
         prev_top  = top
         prev_text = text
 
     if cur:
-        paragraphs.append("".join(cur))
+        paragraphs.append(JOIN_SEP.join(cur))
 
-    return "\n\n".join(paragraphs)
+    return [_block(p, True) for p in paragraphs]
 
 
-def _reflow_cjk_raw(raw: str) -> str:
+def _reflow_cjk_raw(raw: str) -> list:
     """
     Paragraph reflow for CJK text from plain extract_text().
     Consecutive non-empty lines with no indent/sentence-end → joined (no space).
     """
-    CJK_ENDS = set("。？！…」』）)")
+    import re as _re
+    _is_korean = _hangul_ratio(raw) >= 0.35
+    if _is_korean:
+        CJK_ENDS = set("。？！…」』.?!")  # Korean uses ASCII punctuation
+        JOIN_SEP  = " "
+    else:
+        CJK_ENDS = set("。？！…」』")      # parenthetical ) / ） excluded
+        JOIN_SEP  = ""
+
+    _SECTION_RE = _re.compile(r'^[\uff10-\uff19\d]+[\u3001\uff0c]')
     lines = [ln.rstrip() for ln in raw.splitlines()]
 
     paragraphs: list = []
@@ -7314,29 +7505,37 @@ def _reflow_cjk_raw(raw: str) -> str:
         stripped = ln.strip()
         if not stripped:
             if cur:
-                paragraphs.append("".join(cur))
+                paragraphs.append(JOIN_SEP.join(cur))
                 cur = []
             prev = ""
             continue
         # Indent → new paragraph
         indent = len(ln) - len(ln.lstrip())
         if indent >= 2 and cur:
-            paragraphs.append("".join(cur))
+            paragraphs.append(JOIN_SEP.join(cur))
+            cur = []
+        # Sentence-end on previous line → flush before current line.
+        elif prev and prev[-1] in CJK_ENDS and cur:
+            paragraphs.append(JOIN_SEP.join(cur))
+            cur = []
+        # Numbered section start → new block
+        elif _SECTION_RE.match(stripped) and cur:
+            paragraphs.append(JOIN_SEP.join(cur))
             cur = []
         cur.append(stripped)
-        # If previous line ended sentence, next line starts new para
-        if prev and prev[-1] in CJK_ENDS and cur:
-            paragraphs.append("".join(cur))
+        # Flush section title immediately so next line starts fresh
+        if _SECTION_RE.match(stripped):
+            paragraphs.append(JOIN_SEP.join(cur))
             cur = []
         prev = stripped
 
     if cur:
-        paragraphs.append("".join(cur))
+        paragraphs.append(JOIN_SEP.join(cur))
 
-    return "\n\n".join(p for p in paragraphs if p)
+    return [_block(p, True) for p in paragraphs if p]
 
 
-def _reflow_words(words: list, page_width: float, col_detect: bool) -> str:
+def _reflow_words(words: list, page_width: float, col_detect: bool) -> list:
     """
     Reconstruct readable paragraphs from PDF word positions.
 
@@ -7347,7 +7546,7 @@ def _reflow_words(words: list, page_width: float, col_detect: bool) -> str:
     5. Optional: detect two-column layout, process each side separately.
     """
     if not words:
-        return ""
+        return []
 
     Y_TOL = 5           # pt — vertical tolerance for same-line grouping
 
@@ -7366,11 +7565,11 @@ def _reflow_words(words: list, page_width: float, col_detect: bool) -> str:
             mid = gap_mid
 
     if mid is not None:
-        left_txt  = _reflow_column([w for w in words if w["x1"] <= mid],  Y_TOL)
-        right_txt = _reflow_column([w for w in words if w["x0"] >= mid], Y_TOL)
-        if right_txt.strip():
-            return left_txt + "\n\n── ── ── ──\n\n" + right_txt
-        return left_txt
+        left_bl  = _reflow_column([w for w in words if w["x1"] <= mid],  Y_TOL)
+        right_bl = _reflow_column([w for w in words if w["x0"] >= mid], Y_TOL)
+        if right_bl:
+            return left_bl + [{"type": "sep", "text": "── ── ── ──"}] + right_bl
+        return left_bl
     return _reflow_column(words, Y_TOL)
 
 
@@ -7476,25 +7675,114 @@ def _reflow_column(words: list, y_tol: float) -> str:
     if cur_lines:
         paragraphs.append(" ".join(cur_lines))
 
-    return "\n\n".join(paragraphs)
+    return [_block(p, False) for p in paragraphs]
+
+
+_SEP_ENDS = frozenset("。？！…」』.?!")  # chars that mark a sentence end
+
+import re as _re_nav
+# Matches page-navigation artifacts embedded in the PDF:
+#   （次ページへ） p. 3   /   (次ページへ)p.5   /   次ページへ   etc.
+_NAV_RE = _re_nav.compile(
+    r"^\s*[（(]?\s*次ページへ\s*[）)]?\s*(p\s*[.\uff0e]\s*\d+)?\s*$",
+    _re_nav.IGNORECASE,
+)
+
+
+def _is_nav_block(b: dict) -> bool:
+    """Return True for page-turn navigation markers that should be discarded."""
+    return bool(_NAV_RE.match(b.get("text", "")))
+
+
+def _flatten_pages_for_export(pages: list) -> list:
+    """
+    Flatten list-of-pages into a single ordered block stream.
+
+    Paragraphs split across page boundaries are silently merged.
+    No page-separator markers are emitted — the output flows naturally.
+    """
+    flat:  list       = []
+    carry: dict | None = None   # incomplete body block from previous page
+
+    for raw_blocks in pages:
+        blocks = [b for b in raw_blocks if not _is_nav_block(b)]
+
+        # ── Merge carry into first body block of this page ──────────────────
+        if carry is not None:
+            fb_idx = next(
+                (j for j in range(len(blocks))
+                 if blocks[j].get("type") == "body"),
+                None)
+            if fb_idx is not None:
+                lt      = carry["text"].rstrip()
+                ft      = blocks[fb_idx]["text"].lstrip()
+                sample  = lt + ft
+                is_cjk_ = _cjk_ratio(sample) >= 0.20
+                joiner  = " " if _hangul_ratio(sample) >= 0.20 else ("" if is_cjk_ else " ")
+                blocks[fb_idx] = _block(lt + joiner + ft, is_cjk_)
+            # carry is consumed regardless (either merged or discarded if no body)
+            carry = None
+
+        # ── Detect incomplete last body block → carry to next page ───────────
+        lb_idx = next(
+            (j for j in range(len(blocks) - 1, -1, -1)
+             if blocks[j].get("type") == "body"),
+            None)
+        if lb_idx is not None:
+            last_text = blocks[lb_idx]["text"].rstrip()
+            if last_text and last_text[-1] not in _SEP_ENDS:
+                carry  = blocks[lb_idx]
+                blocks = blocks[:lb_idx] + blocks[lb_idx + 1:]
+
+        flat.extend(blocks)
+
+    # Flush any remaining carry (document ends mid-sentence)
+    if carry is not None:
+        flat.append(carry)
+
+    return flat
 
 
 def _pdf_export_txt(pages: list, out_path: str):
-    sep = "\n\n" + "═" * 62 + "  [page break]  " + "═" * 4 + "\n\n"
-    # UTF-8 with BOM so Windows Notepad / Excel open CJK cleanly
+    """
+    pages: list[list[dict]]  (one list of blocks per page)
+    Exports to UTF-8 BOM text with visual structure markers.
+    """
+    flat = _flatten_pages_for_export(pages)
+    parts = []
+    for b in flat:
+        t    = b.get("type", "body")
+        text = b.get("text", "").strip()
+        if not text:
+            continue
+        if t == "h1":
+            bar = "═" * min(max(len(text) + 4, 24), 64)
+            parts.append(f"\n{bar}\n  {text}\n{bar}\n")
+        elif t == "h2":
+            parts.append(f"\n▌ {text}\n")
+        elif t == "li":
+            if not text or text[0] not in _LI_STARTERS:
+                text = "• " + text
+            parts.append("  " + text)
+        elif t == "sep":
+            parts.append(f"\n\n{text}\n\n")
+        else:
+            parts.append(text)
     with open(out_path, "w", encoding="utf-8-sig") as f:
-        f.write(sep.join(pages))
+        f.write("\n".join(p if p.startswith("\n") else p for p in parts))
 
 
 def _pdf_qc_check(pages: list) -> list:
     """
-    Quality check — returns a list of dicts, one per page:
-      ok (bool), chars (int), suspicious (int), cjk_pct (float), issues (list[str])
-    Suspicious chars: replacement □, low char-density pages, garbled runs.
+    Quality check — returns a list of dicts, one per page.
+    pages: list[list[dict]]  (blocks format)
     """
     import unicodedata
     results = []
-    for i, text in enumerate(pages):
+    for i, blocks in enumerate(pages):
+        text   = (_blocks_to_plain(blocks)
+                  if (blocks and isinstance(blocks[0], dict))
+                  else (blocks if isinstance(blocks, str) else ""))
         issues = []
         non_ws = [c for c in text if not c.isspace()]
         chars  = len(non_ws)
@@ -7539,14 +7827,19 @@ def _docx_set_fonts(run, latin: str, cjk: str, size_pt: float):
 
 
 def _pdf_export_docx(pages: list, out_path: str, source_name: str = ""):
+    """
+    pages: list[list[dict]]  (one list of classified blocks per page)
+    Exports a DOCX using Word Heading 1/2 styles for h1/h2,
+    List Paragraph for li, Normal for body.  CJK fonts patched on every run.
+    """
     from docx import Document
     from docx.shared import Pt, Cm, RGBColor
     from docx.enum.text import WD_LINE_SPACING  # noqa: F401
     from docx.oxml.ns import qn
 
-    # Detect dominant script from all pages combined
-    all_text = "\n".join(pages)
-    is_cjk   = _cjk_ratio(all_text) >= 0.15
+    flat     = _flatten_pages_for_export(pages)
+    all_text = " ".join(b.get("text", "") for b in flat if b.get("type") not in ("page_sep", "sep"))
+    is_cjk     = _cjk_ratio(all_text) >= 0.15
     LATIN_FONT = "Calibri"
     CJK_FONT   = "Yu Gothic" if is_cjk else "Calibri"
     BODY_PT    = 11.0
@@ -7558,67 +7851,74 @@ def _pdf_export_docx(pages: list, out_path: str, source_name: str = ""):
     sec.left_margin   = Cm(2.5)
     sec.right_margin  = Cm(2.5)
 
-    # Normal style: Latin + CJK fonts, 1.15 spacing
-    normal = doc.styles["Normal"]
-    normal.font.name = LATIN_FONT
-    normal.font.size = Pt(BODY_PT)
-    # East-Asia font on the style element
-    rPr = normal.element.get_or_add_rPr()
-    rFonts = rPr.get_or_add_rFonts()
-    rFonts.set(qn("w:eastAsia"), CJK_FONT)
-    rFonts.set(qn("w:cs"),       CJK_FONT)
-    normal.paragraph_format.space_after  = Pt(8)
-    normal.paragraph_format.space_before = Pt(0)
-    normal.paragraph_format.line_spacing_rule = WD_LINE_SPACING.MULTIPLE
-    normal.paragraph_format.line_spacing = 1.15
-
     GREY = RGBColor(0x99, 0x99, 0xbb)
 
-    def _add_run(para, text, bold=False, size=BODY_PT, color=None):
-        run = para.add_run(text)
+    def _patch_cjk(run, size=BODY_PT, bold=False, color=None):
         run.font.name = LATIN_FONT
         run.font.size = Pt(size)
         run.bold      = bold
         if color:
             run.font.color.rgb = color
-        # East-Asian font slot
-        rPr2 = run._r.get_or_add_rPr()
-        rf   = rPr2.get_or_add_rFonts()
+        rPr = run._r.get_or_add_rPr()
+        rf  = rPr.get_or_add_rFonts()
         rf.set(qn("w:eastAsia"), CJK_FONT)
         rf.set(qn("w:cs"),       CJK_FONT)
-        return run
 
-    # Source file header
+    def _patch_style_cjk(style_name):
+        try:
+            st  = doc.styles[style_name]
+            rPr = st.element.get_or_add_rPr()
+            rf  = rPr.get_or_add_rFonts()
+            rf.set(qn("w:eastAsia"), CJK_FONT)
+            rf.set(qn("w:cs"),       CJK_FONT)
+        except Exception:
+            pass
+
+    for sn in ("Normal", "Heading 1", "Heading 2", "List Paragraph"):
+        _patch_style_cjk(sn)
+    normal = doc.styles["Normal"]
+    normal.font.name = LATIN_FONT
+    normal.font.size = Pt(BODY_PT)
+    normal.paragraph_format.space_after  = Pt(8)
+    normal.paragraph_format.space_before = Pt(0)
+    normal.paragraph_format.line_spacing_rule = WD_LINE_SPACING.MULTIPLE
+    normal.paragraph_format.line_spacing = 1.15
+
     if source_name:
-        ph = doc.add_paragraph()
-        _add_run(ph, source_name, bold=True, size=8.5, color=GREY)
+        ph  = doc.add_paragraph()
+        run = ph.add_run(source_name)
+        _patch_cjk(run, size=8.5, bold=True, color=GREY)
         ph.paragraph_format.space_after = Pt(16)
 
-    for i, page_text in enumerate(pages):
-        if i > 0:
-            sp = doc.add_paragraph()
-            _add_run(sp, f"{'─' * 48}  p.{i + 1}", size=7.5, color=GREY)
-            sp.paragraph_format.space_before = Pt(14)
-            sp.paragraph_format.space_after  = Pt(14)
+    for b in flat:
+        btype = b.get("type", "body")
+        text  = b.get("text", "").strip()
+        if not text:
+            continue
 
-        for para_raw in page_text.split("\n\n"):
-            # CJK: lines are already joined without spaces; Latin: join with space
-            lines = [ln.strip() for ln in para_raw.splitlines() if ln.strip()]
-            if not lines:
-                continue
-            joiner = "" if is_cjk else " "
-            para_text = joiner.join(lines)
-            if not para_text:
-                continue
-
-            p = doc.add_paragraph()
-            stripped = para_text.strip()
-            is_heading = (stripped.isupper() and 3 < len(stripped) < 90
-                          and not stripped.startswith("─"))
-            size = 12.0 if is_heading else BODY_PT
-            _add_run(p, para_text, bold=is_heading, size=size)
-            if is_heading:
-                p.paragraph_format.space_before = Pt(10)
+        if btype == "h1":
+            p   = doc.add_heading("", level=1)
+            run = p.add_run(text)
+            _patch_cjk(run, size=16.0, bold=True)
+        elif btype == "h2":
+            p   = doc.add_heading("", level=2)
+            run = p.add_run(text)
+            _patch_cjk(run, size=13.0, bold=True)
+        elif btype == "li":
+            p      = doc.add_paragraph(style="List Paragraph")
+            prefix = "" if (text and text[0] in _LI_STARTERS) else "• "
+            run    = p.add_run(prefix + text)
+            _patch_cjk(run)
+        elif btype == "sep":
+            sp  = doc.add_paragraph()
+            run = sp.add_run(text)
+            _patch_cjk(run, size=8.0, color=GREY)
+            sp.paragraph_format.space_before = Pt(6)
+            sp.paragraph_format.space_after  = Pt(6)
+        else:
+            p   = doc.add_paragraph()
+            run = p.add_run(text)
+            _patch_cjk(run)
 
     doc.save(out_path)
 
@@ -7643,6 +7943,870 @@ def _parse_page_range_str(raw: str, total: int) -> list | None:
             except ValueError:
                 pass
     return sorted(p for p in pages if 1 <= p <= total) or None
+
+
+# =============================================================================
+#  LINK REDIRECTOR  — wizard UI
+# =============================================================================
+_WORKER_JS = r'''/**
+ * LINK REDIRECTOR — Cloudflare Worker
+ * Routes:
+ *   GET  /<code>             → redirect or "expired" page
+ *   GET  /admin              → admin UI  (protected)
+ *   POST /admin/create       → create link  (JSON)
+ *   GET  /admin/links        → list links   (JSON)
+ *   DELETE /admin/delete/<c> → delete link  (JSON)
+ *
+ * Env vars to set in Cloudflare dashboard:
+ *   ADMIN_TOKEN   — secret token for the admin UI
+ *   LINKS         — KV namespace binding (see wrangler.toml)
+ */
+
+export default {
+  async fetch(request, env, ctx) {
+    const url  = new URL(request.url);
+    const path = url.pathname.replace(/\/$/, "") || "/";
+    const method = request.method;
+
+    if (path === "/admin") {
+      const deny = checkAuth(request, env); if (deny) return deny;
+      return serveAdminPage(request);
+    }
+    if (path === "/admin/create" && method === "POST") {
+      const deny = checkAuth(request, env); if (deny) return deny;
+      return handleCreate(request, env);
+    }
+    if (path === "/admin/links" && method === "GET") {
+      const deny = checkAuth(request, env); if (deny) return deny;
+      return handleList(env);
+    }
+    if (path.startsWith("/admin/delete/") && method === "DELETE") {
+      const deny = checkAuth(request, env); if (deny) return deny;
+      return handleDelete(path.slice("/admin/delete/".length), env);
+    }
+
+    const code = path.slice(1);
+    if (!code || code.includes("/")) return new Response("Not found", { status: 404 });
+    return handleRedirect(code, env, ctx);
+  },
+};
+
+function checkAuth(request, env) {
+  const token = env.ADMIN_TOKEN;
+  if (!token) return null;
+  const h = request.headers.get("Authorization") || "";
+  if (h === `Bearer ${token}`) return null;
+  const cookies = parseCookies(request.headers.get("Cookie") || "");
+  if (cookies["admin_token"] === token) return null;
+  if (new URL(request.url).searchParams.get("token") === token) return null;
+  return new Response(loginPage(), { status: 401, headers: { "Content-Type": "text/html;charset=UTF-8" } });
+}
+
+async function handleRedirect(code, env, ctx) {
+  if (!/^[a-zA-Z0-9_-]{1,64}$/.test(code)) return expiredPage("リンクが見つかりません。");
+  const raw = await env.LINKS.get(code);
+  if (!raw) return expiredPage("リンクが見つかりません。");
+  let link; try { link = JSON.parse(raw); } catch { return expiredPage(); }
+  if (link.expires && new Date(link.expires) < new Date()) return expiredPage("このリンクは有効期限切れです。");
+  if (link.maxClicks != null && link.clicks >= link.maxClicks) return expiredPage("クリック数の上限に達しました。");
+  link.clicks = (link.clicks || 0) + 1;
+  ctx.waitUntil(env.LINKS.put(code, JSON.stringify(link)));
+  return Response.redirect(link.url, 302);
+}
+
+async function handleCreate(request, env) {
+  let body; try { body = await request.json(); } catch { return jsonError("JSON invalide.", 400); }
+  const { url, expires, maxClicks, customCode } = body;
+  if (!url || !isValidUrl(url)) return jsonError("URL invalide.", 400);
+  const code = (customCode || "").trim() || nanoid(8);
+  if (!/^[a-zA-Z0-9_-]{1,64}$/.test(code)) return jsonError("Code invalide.", 400);
+  if (expires && isNaN(Date.parse(expires))) return jsonError("Date invalide.", 400);
+  const mc = maxClicks ? parseInt(maxClicks, 10) : null;
+  if (mc !== null && (isNaN(mc) || mc < 1)) return jsonError("Clics max invalide.", 400);
+  const link = { url, created: new Date().toISOString(), expires: expires || null, maxClicks: mc, clicks: 0 };
+  await env.LINKS.put(code, JSON.stringify(link));
+  const origin = new URL(request.url).origin;
+  return jsonOk({ code, shortUrl: `${origin}/${code}`, link });
+}
+
+async function handleList(env) {
+  const list = await env.LINKS.list();
+  const items = await Promise.all(list.keys.map(async ({ name }) => {
+    const raw = await env.LINKS.get(name);
+    try { return { code: name, ...JSON.parse(raw) }; } catch { return { code: name }; }
+  }));
+  return jsonOk(items);
+}
+
+async function handleDelete(code, env) {
+  if (!/^[a-zA-Z0-9_-]{1,64}$/.test(code)) return jsonError("Code invalide.", 400);
+  await env.LINKS.delete(code); return jsonOk({ deleted: code });
+}
+
+function isValidUrl(s) { try { const u = new URL(s); return u.protocol==="https:"||u.protocol==="http:"; } catch { return false; } }
+function nanoid(len=8) { const c="abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"; const b=new Uint8Array(len); crypto.getRandomValues(b); return Array.from(b,x=>c[x%c.length]).join(""); }
+function parseCookies(h) { const o={}; for(const p of h.split(";")){ const[k,...vs]=p.trim().split("="); if(k) o[decodeURIComponent(k.trim())]=decodeURIComponent(vs.join("=").trim()); } return o; }
+function esc(s) { return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+function jsonOk(d) { return new Response(JSON.stringify(d,null,2),{headers:{"Content-Type":"application/json"}}); }
+function jsonError(m,s=400) { return new Response(JSON.stringify({error:m}),{status:s,headers:{"Content-Type":"application/json"}}); }
+
+function expiredPage(msg="このリンクは無効です。") {
+  return new Response(`<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><title>アクセス不可</title>
+<style>body{min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0d0d0d;color:#c9c9c9;font-family:'Segoe UI',system-ui,sans-serif}
+.card{text-align:center;padding:3rem 2.5rem;background:#171717;border-radius:18px;border:1px solid #262626;max-width:420px;width:90%}
+.icon{font-size:3.5rem;margin-bottom:1.2rem}h1{font-size:1.4rem;color:#fff;margin-bottom:.7rem}p{color:#777;font-size:.93rem}</style>
+</head><body><div class="card"><div class="icon">🔒</div><h1>アクセス拒否</h1><p>${esc(msg)}</p></div></body></html>`,
+  {status:410,headers:{"Content-Type":"text/html;charset=UTF-8"}});
+}
+
+function loginPage() {
+  return `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>Admin</title>
+<style>body{min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0d0d0d;font-family:'Segoe UI',system-ui,sans-serif}
+.card{background:#171717;border:1px solid #262626;border-radius:16px;padding:2.5rem;width:360px}
+h1{color:#fff;font-size:1.3rem;margin-bottom:1.5rem;text-align:center}
+input{width:100%;padding:.75rem 1rem;background:#0d0d0d;border:1px solid #2e2e2e;border-radius:8px;color:#e0e0e0;font-size:.95rem;margin-bottom:1rem;outline:none}
+input:focus{border-color:#f77f00}
+button{width:100%;padding:.8rem;background:#f77f00;color:#fff;border:none;border-radius:8px;font-size:1rem;cursor:pointer;font-weight:600}</style>
+</head><body><div class="card"><h1>🔗 Link Redirector</h1>
+<form id="f"><input id="tok" type="password" placeholder="Token admin" required>
+<button type="submit">Connexion</button></form>
+<script>document.getElementById('f').addEventListener('submit',e=>{e.preventDefault();window.location.href='/admin?token='+encodeURIComponent(document.getElementById('tok').value);});</script>
+</div></body></html>`;
+}
+
+function serveAdminPage(request) {
+  const url=new URL(request.url); const qt=url.searchParams.get("token");
+  const headers={"Content-Type":"text/html;charset=UTF-8"};
+  if(qt) headers["Set-Cookie"]=`admin_token=${encodeURIComponent(qt)};Path=/;SameSite=Strict;Secure`;
+  return new Response(adminPage(url.origin),{headers});
+}
+
+function adminPage(origin) { return `<!DOCTYPE html>
+<html lang="fr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Link Redirector</title>
+<style>*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#0d0d0d;--bg2:#171717;--bg3:#1f1f1f;--bd:#2a2a2a;--acc:#f77f00;--fg:#e2e2e2;--fg2:#777;--red:#ff6b6b;--grn:#51cf66}
+body{background:var(--bg);color:var(--fg);font-family:'Segoe UI',system-ui,sans-serif;min-height:100vh}
+header{background:var(--bg2);border-bottom:1px solid var(--bd);padding:1rem 2rem;display:flex;align-items:center;gap:.75rem}
+header h1{font-size:1.15rem;color:#fff}main{max-width:900px;margin:0 auto;padding:2rem 1.5rem}
+.card{background:var(--bg2);border:1px solid var(--bd);border-radius:14px;padding:1.75rem;margin-bottom:2rem}
+h2{font-size:1rem;color:#fff;margin-bottom:1.2rem}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:.85rem}.full{grid-column:1/-1}
+label{font-size:.8rem;color:var(--fg2);display:block;margin-bottom:.35rem}
+input{width:100%;padding:.65rem .9rem;background:var(--bg3);border:1px solid var(--bd);border-radius:8px;color:var(--fg);font-size:.9rem;outline:none}
+input:focus{border-color:var(--acc)}
+.btn{padding:.65rem 1.4rem;border:none;border-radius:8px;font-size:.9rem;font-weight:600;cursor:pointer}
+.btn-primary{background:var(--acc);color:#fff}.btn-danger{background:transparent;color:var(--red);border:1px solid var(--red)}
+#result{margin-top:1rem;padding:.9rem 1.1rem;border-radius:8px;font-size:.88rem;display:none}
+#result.ok{background:#1a2e1a;border:1px solid #2d5a2d;color:var(--grn)}
+#result.err{background:#2e1a1a;border:1px solid #5a2d2d;color:var(--red)}
+.link{color:#fff;font-weight:600;cursor:pointer;text-decoration:underline}
+table{width:100%;border-collapse:collapse;font-size:.85rem;margin-top:.5rem}
+th{color:var(--fg2);text-align:left;padding:.5rem .75rem;font-weight:500;border-bottom:1px solid var(--bd)}
+td{padding:.6rem .75rem;border-bottom:1px solid #1a1a1a;vertical-align:middle}
+.short{color:var(--acc);cursor:pointer;font-weight:500}.dest{color:var(--fg2);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.badge{display:inline-block;padding:.2rem .55rem;border-radius:20px;font-size:.75rem;font-weight:600}
+.badge.ok{background:#1a2e1a;color:var(--grn)}.badge.exp{background:#2e1a1a;color:var(--red)}
+.empty{color:var(--fg2);text-align:center;padding:2rem;font-size:.9rem}
+.refresh{float:right;background:none;border:none;color:var(--fg2);cursor:pointer;font-size:.85rem}
+</style></head><body>
+<header><span>🔗</span><h1>Link Redirector</h1><span>— Admin</span></header>
+<main>
+<div class="card"><h2>✚ Créer un lien</h2><div class="grid">
+<div class="full"><label>URL de destination *</label><input id="url" type="url" placeholder="https://ma-pwa.vercel.app"></div>
+<div><label>Expiration (date &amp; heure)</label><input id="expires" type="datetime-local"></div>
+<div><label>Clics max</label><input id="maxClicks" type="number" min="1" placeholder="illimité"></div>
+<div><label>Code personnalisé</label><input id="customCode" type="text" placeholder="mon-projet-v2"></div>
+<div style="display:flex;align-items:flex-end"><button class="btn btn-primary" onclick="createLink()">▶ Générer</button></div>
+</div><div id="result"></div></div>
+<div class="card"><h2>Liens existants<button class="refresh" onclick="loadLinks()">↺</button></h2>
+<table><thead><tr><th>Code</th><th>Destination</th><th>Expiration</th><th>Clics</th><th>Statut</th><th></th></tr></thead>
+<tbody id="links-body"><tr><td colspan="6" class="empty">Chargement…</td></tr></tbody></table></div>
+</main>
+<script>
+const ORIGIN=${JSON.stringify(origin)};
+function getToken(){const m=document.cookie.match(/(?:^|;)\\s*admin_token=([^;]+)/);return m?decodeURIComponent(m[1]):"";}
+function ah(){return{"Authorization":"Bearer "+getToken(),"Content-Type":"application/json"};}
+async function createLink(){
+  const url=document.getElementById('url').value.trim();
+  const expires=document.getElementById('expires').value;
+  const maxClicks=document.getElementById('maxClicks').value;
+  const customCode=document.getElementById('customCode').value.trim();
+  const res=document.getElementById('result');res.style.display='none';
+  if(!url){showResult('err','URL requise.');return;}
+  try{
+    const r=await fetch('/admin/create',{method:'POST',headers:ah(),body:JSON.stringify({url,expires:expires||null,maxClicks:maxClicks?parseInt(maxClicks):null,customCode:customCode||null})});
+    const d=await r.json();
+    if(!r.ok){showResult('err',d.error||'Erreur.');return;}
+    showResult('ok',\`Lien : <span class="link" onclick="copy('\${d.shortUrl}')">\${d.shortUrl}</span> (cliquer pour copier)\`);
+    loadLinks();
+  }catch(e){showResult('err','Erreur réseau : '+e.message);}
+}
+async function loadLinks(){
+  const tb=document.getElementById('links-body');
+  tb.innerHTML='<tr><td colspan="6" class="empty">Chargement…</td></tr>';
+  try{
+    const r=await fetch('/admin/links',{headers:ah()});const d=await r.json();
+    if(!r.ok||!Array.isArray(d)){tb.innerHTML='<tr><td colspan="6" class="empty">Erreur.</td></tr>';return;}
+    if(!d.length){tb.innerHTML='<tr><td colspan="6" class="empty">Aucun lien.</td></tr>';return;}
+    tb.innerHTML=d.map(l=>{
+      const short=ORIGIN+'/'+esc(l.code);
+      const exp=l.expires?new Date(l.expires).toLocaleString('fr-FR'):'∞';
+      const expired=l.expires&&new Date(l.expires)<new Date();
+      const maxed=l.maxClicks!=null&&l.clicks>=l.maxClicks;
+      const ok=!expired&&!maxed;
+      const cl=l.maxClicks!=null?\`\${l.clicks||0}/\${l.maxClicks}\`:\`\${l.clicks||0}\`;
+      return \`<tr><td><span class="short" onclick="copy('\${short}')">\${esc(l.code)}</span></td>
+      <td><span class="dest" title="\${esc(l.url||'')}">\${esc(l.url||'—')}</span></td>
+      <td>\${exp}</td><td>\${cl}</td>
+      <td><span class="badge \${ok?'ok':'exp'}">\${ok?'Actif':'Expiré'}</span></td>
+      <td><button class="btn btn-danger" style="padding:.3rem .7rem;font-size:.78rem" onclick="del('\${esc(l.code)}',this)">✕</button></td></tr>\`;
+    }).join('');
+  }catch(e){tb.innerHTML='<tr><td colspan="6" class="empty">'+e.message+'</td></tr>';}
+}
+async function del(code,btn){
+  if(!confirm(\`Supprimer "\${code}" ?\`))return;
+  const row=btn.closest('tr');row.style.opacity='.4';
+  const r=await fetch('/admin/delete/'+encodeURIComponent(code),{method:'DELETE',headers:ah()});
+  if(r.ok)row.remove();else{row.style.opacity='1';alert('Erreur.');}
+}
+function showResult(t,h){const el=document.getElementById('result');el.className=t;el.innerHTML=h;el.style.display='block';}
+function copy(t){navigator.clipboard.writeText(t).then(()=>alert('Copié : '+t));}
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+loadLinks();
+</script></body></html>`;
+}
+'''
+
+_WRANGLER_TOML = '''name = "link-redirector"
+main = "worker.js"
+compatibility_date = "2024-01-01"
+
+[[kv_namespaces]]
+binding = "LINKS"
+id      = "YOUR_KV_NAMESPACE_ID"
+
+[vars]
+# Set ADMIN_TOKEN as a secret instead:
+#   wrangler secret put ADMIN_TOKEN
+'''
+
+_DEPLOY_STEPS = """How to deploy the Cloudflare Worker
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. Install Wrangler CLI
+   npm install -g wrangler
+   wrangler login
+
+2. Create a KV namespace
+   wrangler kv:namespace create LINKS
+   → Copy the 'id' value into wrangler.toml
+
+3. Set your admin token (never stored in plain text)
+   wrangler secret put ADMIN_TOKEN
+   → Enter your secret when prompted
+
+4. Save worker.js + wrangler.toml in the same folder
+   (use the "Save worker.js" button above)
+
+5. Deploy
+   wrangler deploy
+
+6. Open the admin panel at:
+   https://<your-worker>.workers.dev/admin?token=<your-token>
+"""
+
+
+class _DateTimePicker(tk.Toplevel):
+    """Modal calendar + time picker. Read .result ('YYYY-MM-DDTHH:MM') after close."""
+
+    def __init__(self, parent, initial=""):
+        super().__init__(parent)
+        self.title("Date & Time")
+        self.configure(bg=BG)
+        self.resizable(False, False)
+        self.grab_set()
+        self.result = None
+
+        import datetime as _dt, calendar as _cal
+        now = _dt.datetime.now()
+        try:
+            dt = _dt.datetime.fromisoformat(initial) if initial else now
+        except Exception:
+            dt = now
+
+        self._year   = tk.IntVar(value=dt.year)
+        self._month  = tk.IntVar(value=dt.month)
+        self._day    = tk.IntVar(value=dt.day)
+        self._hour   = tk.IntVar(value=dt.hour)
+        self._minute = tk.IntVar(value=dt.minute)
+        self._sel_day = dt.day
+
+        self._build()
+        self._render_days()
+        self.update_idletasks()
+        px = parent.winfo_rootx() + parent.winfo_width()  // 2 - self.winfo_width()  // 2
+        py = parent.winfo_rooty() + parent.winfo_height() // 2 - self.winfo_height() // 2
+        _center_win(self)
+
+    def _build(self):
+        # ── Month / Year nav ─────────────────────────────────────────────────
+        nav = tk.Frame(self, bg=BG2)
+        nav.pack(fill="x")
+        tk.Button(nav, text="◀", command=self._prev_month,
+                  bg=BG2, fg=FG, relief="flat", font=FONT_SM,
+                  cursor="hand2", activebackground=BG3, activeforeground=FG
+                  ).pack(side="left", padx=8, pady=6)
+        self._month_lbl = tk.Label(nav, text="", bg=BG2, fg=FG,
+                                    font=FONT_BODY, width=18)
+        self._month_lbl.pack(side="left", expand=True)
+        tk.Button(nav, text="▶", command=self._next_month,
+                  bg=BG2, fg=FG, relief="flat", font=FONT_SM,
+                  cursor="hand2", activebackground=BG3, activeforeground=FG
+                  ).pack(side="right", padx=8, pady=6)
+
+        # ── Day-of-week headers ───────────────────────────────────────────────
+        hdr = tk.Frame(self, bg=BG)
+        hdr.pack(padx=10, pady=(4, 0))
+        for d in ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]:
+            tk.Label(hdr, text=d, bg=BG, fg=FG2,
+                     font=FONT_SM, width=3).pack(side="left", padx=2)
+
+        # ── Day grid ──────────────────────────────────────────────────────────
+        self._day_frame = tk.Frame(self, bg=BG)
+        self._day_frame.pack(padx=10, pady=4)
+
+        # ── Time ─────────────────────────────────────────────────────────────
+        tf = tk.Frame(self, bg=BG2)
+        tf.pack(fill="x")
+        inner = tk.Frame(tf, bg=BG2)
+        inner.pack(pady=8)
+        tk.Label(inner, text="Heure :", bg=BG2, fg=FG2,
+                 font=FONT_SM).pack(side="left", padx=(0, 6))
+        tk.Spinbox(inner, textvariable=self._hour, from_=0, to=23,
+                   width=3, format="%02.0f", bg=BG3, fg=FG,
+                   buttonbackground=BG3, relief="flat",
+                   font=FONT_SM).pack(side="left")
+        tk.Label(inner, text=" : ", bg=BG2, fg=FG,
+                 font=FONT_BODY).pack(side="left")
+        tk.Spinbox(inner, textvariable=self._minute, from_=0, to=59,
+                   width=3, format="%02.0f", bg=BG3, fg=FG,
+                   buttonbackground=BG3, relief="flat",
+                   font=FONT_SM).pack(side="left")
+
+        # ── Buttons ───────────────────────────────────────────────────────────
+        bf = tk.Frame(self, bg=BG)
+        bf.pack(fill="x", padx=12, pady=10)
+        btn(bf, "Annuler", self.destroy, primary=False).pack(side="right", padx=(4, 0))
+        btn(bf, "OK", self._ok, primary=True).pack(side="right")
+
+    def _render_days(self):
+        import calendar as cal, datetime as dt
+        for w in self._day_frame.winfo_children():
+            w.destroy()
+        y, m = self._year.get(), self._month.get()
+        self._month_lbl.config(text=dt.date(y, m, 1).strftime("%B %Y"))
+        for week in cal.monthcalendar(y, m):
+            row = tk.Frame(self._day_frame, bg=BG)
+            row.pack()
+            for day in week:
+                if day == 0:
+                    tk.Label(row, text="", bg=BG, width=3,
+                             font=FONT_SM).pack(side="left", padx=2, pady=2)
+                else:
+                    is_sel = (day == self._sel_day)
+                    b = tk.Button(row, text=str(day), width=3,
+                                  bg=ACCENT if is_sel else BG3, fg=FG,
+                                  relief="flat", font=FONT_SM, cursor="hand2",
+                                  activebackground=ACCENT2, activeforeground=FG,
+                                  command=lambda d=day: self._pick(d))
+                    b.pack(side="left", padx=2, pady=2)
+
+    def _pick(self, day):
+        self._sel_day = day
+        self._day.set(day)
+        self._render_days()
+
+    def _prev_month(self):
+        m, y = self._month.get(), self._year.get()
+        m -= 1
+        if m < 1:
+            m, y = 12, y - 1
+        self._month.set(m); self._year.set(y)
+        self._render_days()
+
+    def _next_month(self):
+        m, y = self._month.get(), self._year.get()
+        m += 1
+        if m > 12:
+            m, y = 1, y + 1
+        self._month.set(m); self._year.set(y)
+        self._render_days()
+
+    def _ok(self):
+        import calendar as cal
+        y, m = self._year.get(), self._month.get()
+        d = min(self._sel_day, cal.monthrange(y, m)[1])
+        h, mn = self._hour.get(), self._minute.get()
+        self.result = f"{y:04d}-{m:02d}-{d:02d}T{h:02d}:{mn:02d}"
+        self.destroy()
+
+
+class LinkRedirectorWizard(tk.Toplevel):
+    """Manage expiring short links backed by a Cloudflare Worker."""
+    WIN_W, WIN_H = 860, 580
+
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.title(_t("lrw.title"))
+        self.configure(bg=BG)
+        self.resizable(True, True)
+        self.minsize(700, 460)
+
+        # Persisted settings in a small JSON sidecar
+        self._cfg_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "_lrw_config.json")
+        self._cfg = self._load_cfg()
+
+        self._worker_url = tk.StringVar(value=self._cfg.get("worker_url", ""))
+        self._token      = tk.StringVar(value=self._cfg.get("token", ""))
+
+        self._build()
+        self.update_idletasks()
+        pw = parent.winfo_rootx(); py = parent.winfo_rooty()
+        pw2 = parent.winfo_width(); ph2 = parent.winfo_height()
+        w, h = self.WIN_W, self.WIN_H
+        self.geometry(f"{w}x{h}")
+        _center_win(self)
+
+    # ── Config persistence ────────────────────────────────────────────────────
+    def _load_cfg(self):
+        try:
+            with open(self._cfg_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return {}
+
+    def _save_cfg(self, _btn=None):
+        url = self._worker_url.get().strip().rstrip("/")
+        if url and not url.startswith("http"):
+            url = "https://" + url
+        self._worker_url.set(url)
+        self._cfg["worker_url"] = url
+        self._cfg["token"]      = self._token.get().strip()
+        try:
+            with open(self._cfg_path, "w", encoding="utf-8") as f:
+                json.dump(self._cfg, f, indent=2)
+            if _btn:
+                _btn.config(text="✔")
+                self.after(1500, lambda: _btn.config(text="💾"))
+        except Exception as e:
+            if _btn:
+                _btn.config(text="✗")
+                self.after(1500, lambda: _btn.config(text="💾"))
+
+    # ── Build ─────────────────────────────────────────────────────────────────
+    def _build(self):
+        # ── Top: Worker URL + Token ───────────────────────────────────────────
+        bar = tk.Frame(self, bg=BG2)
+        bar.pack(fill="x", padx=0, pady=0)
+        inner = tk.Frame(bar, bg=BG2)
+        inner.pack(fill="x", padx=16, pady=10)
+
+        tk.Label(inner, text=_t("lrw.worker_url"), bg=BG2, fg=FG2,
+                 font=FONT_SM, width=14, anchor="e").pack(side="left")
+        tk.Entry(inner, textvariable=self._worker_url, bg=BG3, fg=FG,
+                 insertbackground=FG, relief="flat", font=FONT_SM,
+                 width=34).pack(side="left", padx=(4, 12))
+
+        tk.Label(inner, text=_t("lrw.token"), bg=BG2, fg=FG2,
+                 font=FONT_SM, width=10, anchor="e").pack(side="left")
+        tk.Entry(inner, textvariable=self._token, bg=BG3, fg=FG,
+                 show="•", insertbackground=FG, relief="flat",
+                 font=FONT_SM, width=22).pack(side="left", padx=(4, 12))
+
+        _sb = btn(inner, "💾", None, primary=False)
+        _sb.config(command=lambda b=_sb: self._save_cfg(b))
+        _sb.pack(side="left")
+
+        tk.Frame(self, bg=BG3, height=1).pack(fill="x")
+
+        # ── Notebook tabs ─────────────────────────────────────────────────────
+        nb = ttk.Notebook(self)
+        nb.pack(fill="both", expand=True, padx=0, pady=0)
+
+        tab_create = tk.Frame(nb, bg=BG)
+        tab_links  = tk.Frame(nb, bg=BG)
+        tab_deploy = tk.Frame(nb, bg=BG)
+
+        nb.add(tab_create, text=f"  {_t('lrw.tab_create')}  ")
+        nb.add(tab_links,  text=f"  {_t('lrw.tab_links')}  ")
+        nb.add(tab_deploy, text=f"  {_t('lrw.tab_deploy')}  ")
+
+        nb.bind("<<NotebookTabChanged>>",
+                lambda e: self._on_tab(nb.index("current")))
+
+        self._build_create(tab_create)
+        self._build_links(tab_links)
+        self._build_deploy(tab_deploy)
+
+    def _on_tab(self, idx):
+        if idx == 1:
+            self._refresh_links()
+
+    # ── Tab: Create ───────────────────────────────────────────────────────────
+    def _build_create(self, p):
+        def row(lbl, widget_fn, lw=16):
+            r = tk.Frame(p, bg=BG)
+            r.pack(fill="x", padx=24, pady=5)
+            tk.Label(r, text=lbl, bg=BG, fg=FG2, font=FONT_SM,
+                     width=lw, anchor="e").pack(side="left", padx=(0, 8))
+            widget_fn(r)
+
+        self._c_url = tk.StringVar()
+        self._c_exp = tk.StringVar()
+        self._c_max = tk.StringVar()
+        self._c_cod = tk.StringVar()
+
+        tk.Frame(p, bg=BG, height=16).pack()
+
+        row(_t("lrw.url"), lambda r: tk.Entry(
+            r, textvariable=self._c_url, bg=BG3, fg=FG,
+            insertbackground=FG, relief="flat", font=FONT_SM, width=44
+        ).pack(side="left"))
+
+        def _expiry_widget(r):
+            tk.Entry(r, textvariable=self._c_exp, bg=BG3, fg=FG,
+                     insertbackground=FG, relief="flat", font=FONT_SM,
+                     width=20).pack(side="left")
+            def _open_picker():
+                p = _DateTimePicker(self, self._c_exp.get())
+                self.wait_window(p)
+                if p.result:
+                    self._c_exp.set(p.result)
+            tk.Button(r, text="📅", command=_open_picker,
+                      bg=BG3, fg=FG, relief="flat", font=FONT_SM,
+                      cursor="hand2", activebackground=BG2,
+                      activeforeground=FG, padx=6).pack(side="left", padx=(4, 0))
+            tk.Button(r, text="✕", command=lambda: self._c_exp.set(""),
+                      bg=BG3, fg=FG2, relief="flat", font=FONT_SM,
+                      cursor="hand2", activebackground=BG2,
+                      activeforeground=FG, padx=4).pack(side="left", padx=(2, 0))
+
+        row(_t("lrw.expires"), _expiry_widget)
+
+        row(_t("lrw.max_clicks"), lambda r: tk.Entry(
+            r, textvariable=self._c_max, bg=BG3, fg=FG,
+            insertbackground=FG, relief="flat", font=FONT_SM, width=10
+        ).pack(side="left"))
+
+        row(_t("lrw.custom"), lambda r: tk.Entry(
+            r, textvariable=self._c_cod, bg=BG3, fg=FG,
+            insertbackground=FG, relief="flat", font=FONT_SM, width=22
+        ).pack(side="left"))
+
+        tk.Frame(p, bg=BG, height=10).pack()
+        af = tk.Frame(p, bg=BG)
+        af.pack(fill="x", padx=24)
+        btn(af, _t("lrw.generate"), self._create_link, primary=True).pack(side="left")
+
+        # Result box
+        self._c_result_var = tk.StringVar()
+        self._c_result_frame = tk.Frame(p, bg=BG)
+        self._c_result_frame.pack(fill="x", padx=24, pady=(16, 0))
+        self._c_result_lbl = tk.Label(
+            self._c_result_frame, textvariable=self._c_result_var,
+            bg="#1a2e1a", fg="#51cf66", relief="flat", font=FONT_SM,
+            anchor="w", padx=12, pady=8, wraplength=700, justify="left")
+        self._c_copy_btn = btn(self._c_result_frame, _t("lrw.copy"),
+                               self._copy_result, primary=False)
+        self._c_result_frame.pack_forget()
+
+    def _create_link(self):
+        url     = self._c_url.get().strip()
+        expires = self._c_exp.get().strip()
+        max_cl  = self._c_max.get().strip()
+        custom  = self._c_cod.get().strip()
+
+        if not url:
+            messagebox.showwarning(_t("lrw.title"), "URL requise.", parent=self)
+            return
+
+        base  = self._worker_url.get().strip().rstrip("/")
+        token = self._token.get().strip()
+        if not base:
+            messagebox.showwarning(_t("lrw.title"),
+                                   "Worker URL non configurée.", parent=self)
+            return
+
+        payload = {"url": url}
+        if expires:
+            # Treat input as JST (UTC+9) → convert to UTC for the Worker
+            import datetime as _dt
+            try:
+                naive = _dt.datetime.fromisoformat(expires)
+                jst   = _dt.timezone(_dt.timedelta(hours=9))
+                utc_str = naive.replace(tzinfo=jst).astimezone(
+                    _dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+                payload["expires"] = utc_str
+            except Exception:
+                payload["expires"] = expires
+        if max_cl:  payload["maxClicks"]  = int(max_cl)
+        if custom:  payload["customCode"] = custom
+
+        def _worker():
+            try:
+                import urllib.request, urllib.error, json as _json
+                data = _json.dumps(payload).encode()
+                req  = urllib.request.Request(
+                    f"{base}/admin/create",
+                    data=data,
+                    headers={
+                        "Content-Type": "application/json",
+                        "Authorization": f"Bearer {token}",
+                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36",
+                    },
+                    method="POST")
+                try:
+                    with urllib.request.urlopen(req, timeout=10) as r:
+                        resp = _json.loads(r.read().decode())
+                    self.after(0, lambda: self._on_create_ok(resp))
+                except urllib.error.HTTPError as e:
+                    body = e.read().decode(errors="replace")
+                    self.after(0, lambda: self._on_create_err(
+                        f"HTTP {e.code}: {body[:300]}"))
+            except Exception as ex:
+                self.after(0, lambda: self._on_create_err(str(ex)))
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _on_create_ok(self, resp):
+        short = resp.get("shortUrl", "")
+        self._last_short = short
+        self._c_result_var.set(f"✓  {short}")
+        self._c_result_lbl.config(bg="#1a2e1a", fg="#51cf66")
+        self._c_result_lbl.pack(side="left", fill="x", expand=True)
+        self._c_copy_btn.pack(side="left", padx=(8, 0))
+        self._c_result_frame.pack(fill="x", padx=24, pady=(16, 0))
+
+    def _on_create_err(self, msg):
+        self._last_short = ""
+        self._c_result_var.set(f"✗  {msg}")
+        self._c_result_lbl.config(bg="#2e1a1a", fg="#ff6b6b")
+        self._c_result_lbl.pack(side="left", fill="x", expand=True)
+        self._c_copy_btn.pack_forget()
+        self._c_result_frame.pack(fill="x", padx=24, pady=(16, 0))
+        messagebox.showerror(_t("lrw.title"), msg, parent=self)
+
+    def _copy_result(self):
+        short = getattr(self, "_last_short", "")
+        if short:
+            self.clipboard_clear()
+            self.clipboard_append(short)
+            self._c_copy_btn.config(text=_t("lrw.copied"))
+            self.after(2000, lambda: self._c_copy_btn.config(text=_t("lrw.copy")))
+
+    # ── Tab: Links ────────────────────────────────────────────────────────────
+    def _build_links(self, p):
+        top = tk.Frame(p, bg=BG)
+        top.pack(fill="x", padx=16, pady=(12, 6))
+        btn(top, _t("lrw.refresh"), self._refresh_links, primary=False).pack(side="left")
+        btn(top, _t("lrw.open_admin"), self._open_admin, primary=False).pack(side="left", padx=(8, 0))
+        self._links_status = tk.Label(top, text="", bg=BG, fg=FG2, font=FONT_SM)
+        self._links_status.pack(side="left", padx=12)
+
+        # Table header
+        hdr = tk.Frame(p, bg=BG2)
+        hdr.pack(fill="x", padx=16, pady=(0, 2))
+        for txt, w in [("Code", 12), ("Destination", 36), ("Expiration", 16),
+                       ("Clics", 8), ("Statut", 8)]:
+            tk.Label(hdr, text=txt, bg=BG2, fg=FG2, font=FONT_SM,
+                     width=w, anchor="w").pack(side="left", padx=4, pady=4)
+
+        # Scrollable rows
+        sf = tk.Frame(p, bg=BG)
+        sf.pack(fill="both", expand=True, padx=16)
+        ysb = tk.Scrollbar(sf, orient="vertical", bg=BG2)
+        self._links_cv = tk.Canvas(sf, bg=BG, highlightthickness=0,
+                                   yscrollcommand=ysb.set)
+        ysb.config(command=self._links_cv.yview)
+        ysb.pack(side="right", fill="y")
+        self._links_cv.pack(side="left", fill="both", expand=True)
+        self._links_inner = tk.Frame(self._links_cv, bg=BG)
+        self._links_win   = self._links_cv.create_window(
+            (0, 0), window=self._links_inner, anchor="nw")
+        self._links_inner.bind("<Configure>", lambda e: (
+            self._links_cv.configure(
+                scrollregion=self._links_cv.bbox("all")),
+            self._links_cv.itemconfig(self._links_win,
+                                      width=self._links_cv.winfo_width())))
+        self._links_cv.bind("<Configure>", lambda e: self._links_cv.itemconfig(
+            self._links_win, width=e.width))
+
+    def _refresh_links(self):
+        base  = self._worker_url.get().strip().rstrip("/")
+        token = self._token.get().strip()
+        if not base:
+            self._links_status.config(text="Worker URL non configurée.", fg=FG_RED)
+            return
+        self._links_status.config(text="Chargement…", fg=FG2)
+
+        def _worker():
+            try:
+                import urllib.request, json as _json
+                req = urllib.request.Request(
+                    f"{base}/admin/links",
+                    headers={"Authorization": f"Bearer {token}",
+                             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36"},
+                    method="GET")
+                with urllib.request.urlopen(req, timeout=10) as r:
+                    data = _json.loads(r.read().decode())
+                self.after(0, lambda d=data: self._populate_links(d))
+            except Exception as ex:
+                self.after(0, lambda: self._links_status.config(
+                    text=f"Erreur : {ex}", fg=FG_RED))
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _populate_links(self, data):
+        for w in self._links_inner.winfo_children():
+            w.destroy()
+
+        if not data:
+            tk.Label(self._links_inner, text=_t("lrw.no_links"),
+                     bg=BG, fg=FG2, font=FONT_SM).pack(pady=20)
+            self._links_status.config(text="", fg=FG2)
+            return
+
+        import datetime as _dt
+        for link in data:
+            code    = link.get("code", "?")
+            url     = link.get("url", "—")
+            expires = link.get("expires")
+            clicks  = link.get("clicks", 0)
+            max_cl  = link.get("maxClicks")
+            expired = bool(expires and _dt.datetime.fromisoformat(
+                expires.replace("Z", "+00:00")) < _dt.datetime.now(
+                    _dt.timezone.utc))
+            maxed   = max_cl is not None and clicks >= max_cl
+            ok      = not expired and not maxed
+
+            row = tk.Frame(self._links_inner, bg=BG3)
+            row.pack(fill="x", pady=1)
+
+            base_url = self._worker_url.get().strip().rstrip("/")
+            short    = f"{base_url}/{code}"
+
+            tk.Label(row, text=code, bg=BG3, fg=ACCENT, font=FONT_SM,
+                     width=12, anchor="w", cursor="hand2").pack(
+                side="left", padx=4, pady=5)
+            tk.Label(row, text=url[:52] + ("…" if len(url) > 52 else ""),
+                     bg=BG3, fg=FG2, font=FONT_SM,
+                     width=36, anchor="w").pack(side="left", padx=4)
+            exp_str = (expires[:16] if expires else "∞").replace("T", " ")
+            tk.Label(row, text=exp_str, bg=BG3, fg=FG, font=FONT_SM,
+                     width=16, anchor="w").pack(side="left", padx=4)
+            cl_str = f"{clicks}/{max_cl}" if max_cl else str(clicks)
+            tk.Label(row, text=cl_str, bg=BG3, fg=FG, font=FONT_SM,
+                     width=8, anchor="w").pack(side="left", padx=4)
+            status_fg = FG_GREEN if ok else FG_RED
+            tk.Label(row, text="Actif" if ok else "Expiré",
+                     bg=BG3, fg=status_fg, font=FONT_SM,
+                     width=8, anchor="w").pack(side="left", padx=4)
+
+            # Copy + Delete buttons
+            def _copy(s=short):
+                self.clipboard_clear(); self.clipboard_append(s)
+            def _del(c=code):
+                self._delete_link(c)
+
+            btn(row, _t("lrw.copy"), _copy, primary=False).pack(
+                side="right", padx=4, pady=3)
+            btn(row, _t("lrw.delete"), _del, primary=False).pack(
+                side="right", padx=(0, 4), pady=3)
+
+        self._links_status.config(
+            text=f"{len(data)} lien(s)", fg=FG2)
+        self._links_cv.update_idletasks()
+        self._links_cv.configure(
+            scrollregion=self._links_cv.bbox("all"))
+
+    def _delete_link(self, code):
+        if not messagebox.askyesno(_t("lrw.title"),
+                                   f"Supprimer « {code} » ?", parent=self):
+            return
+        base  = self._worker_url.get().strip().rstrip("/")
+        token = self._token.get().strip()
+
+        def _worker():
+            try:
+                import urllib.request
+                req = urllib.request.Request(
+                    f"{base}/admin/delete/{code}",
+                    headers={"Authorization": f"Bearer {token}",
+                             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36"},
+                    method="DELETE")
+                urllib.request.urlopen(req, timeout=10)
+                self.after(0, self._refresh_links)
+            except Exception as ex:
+                self.after(0, lambda: messagebox.showerror(
+                    _t("lrw.title"), str(ex), parent=self))
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _open_admin(self):
+        base  = self._worker_url.get().strip().rstrip("/")
+        token = self._token.get().strip()
+        if not base:
+            messagebox.showwarning(_t("lrw.title"),
+                                   "Worker URL non configurée.", parent=self)
+            return
+        import webbrowser
+        url = f"{base}/admin"
+        if token:
+            import urllib.parse
+            url += f"?token={urllib.parse.quote(token, safe='')}"
+        webbrowser.open(url)
+
+    # ── Tab: Deploy ───────────────────────────────────────────────────────────
+    def _build_deploy(self, p):
+        tk.Label(p, text=_t("lrw.deploy_title"), bg=BG, fg=FG,
+                 font=FONT_H2).pack(anchor="w", padx=20, pady=(16, 6))
+
+        # Steps text
+        tf = tk.Frame(p, bg=BG)
+        tf.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        ysb = tk.Scrollbar(tf, orient="vertical", bg=BG2)
+        txt = tk.Text(tf, bg=BG3, fg=FG, font=FONT_MONO, relief="flat",
+                      bd=6, wrap="word", yscrollcommand=ysb.set, state="normal")
+        ysb.config(command=txt.yview)
+        ysb.pack(side="right", fill="y")
+        txt.pack(side="left", fill="both", expand=True)
+        txt.insert("1.0", _DEPLOY_STEPS)
+        txt.config(state="disabled")
+
+        # Buttons
+        bf = tk.Frame(p, bg=BG)
+        bf.pack(fill="x", padx=20, pady=(0, 14))
+        btn(bf, _t("lrw.save_worker"), self._save_worker, primary=True).pack(side="left")
+
+    def _save_worker(self):
+        out_dir = filedialog.askdirectory(
+            parent=self, title="Choisir le dossier de destination")
+        if not out_dir:
+            return
+        worker_path   = os.path.join(out_dir, "worker.js")
+        wrangler_path = os.path.join(out_dir, "wrangler.toml")
+        try:
+            with open(worker_path,   "w", encoding="utf-8") as f:
+                f.write(_WORKER_JS)
+            with open(wrangler_path, "w", encoding="utf-8") as f:
+                f.write(_WRANGLER_TOML)
+            messagebox.showinfo(_t("lrw.title"),
+                                f"Fichiers enregistrés dans :\n{out_dir}",
+                                parent=self)
+            try: os.startfile(out_dir)
+            except Exception: pass
+        except Exception as ex:
+            messagebox.showerror(_t("lrw.title"), str(ex), parent=self)
 
 
 # =============================================================================
@@ -7674,7 +8838,8 @@ class PDFExtractorWizard(tk.Toplevel):
         pw = parent.winfo_rootx(); py = parent.winfo_rooty()
         pw2 = parent.winfo_width();  ph2 = parent.winfo_height()
         w, h = self.WIN_W, self.WIN_H
-        self.geometry(f"{w}x{h}+{pw + (pw2 - w)//2}+{py + (ph2 - h)//2}")
+        self.geometry(f"{w}x{h}")
+        _center_win(self)
 
     # ── Build ─────────────────────────────────────────────────────────────────
     def _build(self):
@@ -7964,7 +9129,13 @@ class PDFExtractorWizard(tk.Toplevel):
         p = max(1, min(self._cur_page.get(), self._total_pages))
         self._cur_page.set(p)
         self._page_lbl.config(text=f"{p} / {self._total_pages}")
-        text = pages[p - 1]
+        raw = pages[p - 1]
+        # _pdf_extract_file stores list[dict] blocks; convert to plain string
+        # for the preview widget.
+        if isinstance(raw, list):
+            text = _blocks_to_plain(raw)
+        else:
+            text = str(raw)
         self._txt.config(state="normal")
         self._txt.delete("1.0", "end")
         self._txt.insert("1.0", text)
@@ -8065,6 +9236,8 @@ class HomeScreen(tk.Tk):
                         arrowcolor=FG)
 
     def _build(self):
+        # ── Accent top bar ────────────────────────────────────────────────────
+        tk.Frame(self, bg=ACCENT, height=3).pack(fill="x")
         # ── Hero banner ───────────────────────────────────────────────────────
         hero = tk.Frame(self, bg=BG2)
         hero.pack(fill="x")
@@ -8103,10 +9276,11 @@ class HomeScreen(tk.Tk):
         self._lang_btn.pack(side="right")
 
         # ── Section label ─────────────────────────────────────────────────────
+        tk.Frame(self, bg=BG3, height=1).pack(fill="x")  # hero bottom border
         sec = styled_frame(self)
         sec.pack(fill="x", padx=28, pady=(20, 10))
         label(sec, _t("home.tools"), fg=FG2, font=("Segoe UI", 8, "bold")).pack(side="left")
-        tk.Frame(sec, bg=BG3, height=1).pack(side="left", fill="x", expand=True, padx=(10, 0))
+        tk.Frame(sec, bg=ACCENT, height=1).pack(side="left", fill="x", expand=True, padx=(10, 0))
 
         # ── Tool cards in a scrollable area ───────────────────────────────────
         tools_outer = tk.Frame(self, bg=BG)
@@ -8150,7 +9324,8 @@ class HomeScreen(tk.Tk):
             ("🎨", "Generate",    _t("home.gen_d"),        ImageGenWizard,    "#7c6af7"),
             ("📐", "Guide Mark",  _t("home.gmw_d"),        GuideMarkWizard,   "#2ec4b6"),
             ("📋", "Clipboard",   _t("home.clip_d"),       ClipboardManager,  "#f72585"),
-            ("📄", "PDF Extractor", _t("home.pdf_d"),      PDFExtractorWizard, "#f77f00"),
+            ("📄", "PDF Extractor", _t("home.pdf_d"),      PDFExtractorWizard,    "#f77f00"),
+            ("🔗", "Link Redirector", _t("home.lrw_d"),    LinkRedirectorWizard,  "#9b5de5"),
         ]
         for ico, title, desc, cls, color in tools:
             self._tool_card(ico, title, desc, cls, color)
@@ -8179,31 +9354,32 @@ class HomeScreen(tk.Tk):
 
     def _tool_card(self, ico, title, desc, cls, accent_col):
         outer = tk.Frame(self._tools_inner, bg=BG2, cursor="hand2")
-        outer.pack(fill="x", pady=4)
+        outer.pack(fill="x", pady=3)
 
         # Coloured left stripe
-        stripe = tk.Frame(outer, bg=accent_col, width=4)
+        stripe = tk.Frame(outer, bg=accent_col, width=5)
         stripe.pack(side="left", fill="y")
         stripe.pack_propagate(False)
 
-        # Icon box
-        icon_frm = tk.Frame(outer, bg=BG3, width=46, height=46)
+        # Icon box — tinted with the card's own accent colour
+        icon_bg = _blend_hex(BG3, accent_col, 0.20)
+        icon_frm = tk.Frame(outer, bg=icon_bg, width=48, height=48)
         icon_frm.pack_propagate(False)
-        icon_frm.pack(side="left", padx=14, pady=12)
-        ico_lbl = tk.Label(icon_frm, text=ico, bg=BG3, fg=FG,
-                           font=("Segoe UI", 17))
+        icon_frm.pack(side="left", padx=14, pady=11)
+        ico_lbl = tk.Label(icon_frm, text=ico, bg=icon_bg, fg=accent_col,
+                           font=("Segoe UI", 18))
         ico_lbl.pack(expand=True)
 
         # Text
         txt_frm = tk.Frame(outer, bg=BG2)
-        txt_frm.pack(side="left", fill="both", expand=True, pady=12)
+        txt_frm.pack(side="left", fill="both", expand=True, pady=11)
         t_lbl = label(txt_frm, title, font=FONT_H2, bg=BG2)
         t_lbl.pack(anchor="w")
         d_lbl = label(txt_frm, desc, fg=FG2, font=FONT_SM, bg=BG2)
         d_lbl.pack(anchor="w")
 
         # Arrow
-        arrow = tk.Label(outer, text="›", bg=BG2, fg=FG2,
+        arrow = tk.Label(outer, text="›", bg=BG2, fg=BG3,
                          font=("Segoe UI", 22), cursor="hand2")
         arrow.pack(side="right", padx=16)
 
@@ -8212,14 +9388,14 @@ class HomeScreen(tk.Tk):
         def on_enter(e):
             outer.config(bg=BG3); txt_frm.config(bg=BG3)
             t_lbl.config(bg=BG3); d_lbl.config(bg=BG3)
-            arrow.config(bg=BG3, fg=ACCENT_LIGHT)
-            stripe.config(bg=ACCENT_LIGHT)
+            arrow.config(bg=BG3, fg=accent_col)
+            icon_frm.config(bg=BG3); ico_lbl.config(bg=BG3)
 
         def on_leave(e):
             outer.config(bg=BG2); txt_frm.config(bg=BG2)
             t_lbl.config(bg=BG2); d_lbl.config(bg=BG2)
-            arrow.config(bg=BG2, fg=FG2)
-            stripe.config(bg=accent_col)
+            arrow.config(bg=BG2, fg=BG3)
+            icon_frm.config(bg=icon_bg); ico_lbl.config(bg=icon_bg)
 
         for w in (outer, stripe, icon_frm, ico_lbl, txt_frm, t_lbl, d_lbl, arrow):
             w.bind("<Button-1>", lambda e: open_tool())
