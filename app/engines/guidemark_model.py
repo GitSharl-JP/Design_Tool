@@ -69,10 +69,12 @@ class Segment:
     color: Optional[str] = None
     font_family: Optional[str] = None
     font_style: Optional[str] = None
+    gap_mm: float = 0.0                   # extra space BEFORE this run (+/-)
 
     @property
     def is_plain(self) -> bool:
-        return (self.pt is None and not self.dy_mm and self.tracking is None
+        return (self.pt is None and not self.dy_mm and not self.gap_mm
+                and self.tracking is None
                 and self.color is None and self.font_family is None
                 and self.font_style is None)
 
@@ -83,6 +85,10 @@ class SheetItem:
     design: Design
     segments: List[Segment] = field(default_factory=list)
     design_name: str = ""
+    # whole-label adjustments (composite labels)
+    dx_mm: float = 0.0            # shift right
+    dy_mm: float = 0.0            # shift up
+    center_main: bool = False     # centre only the first run, not the group
 
     @property
     def text(self) -> str:
@@ -90,5 +96,12 @@ class SheetItem:
 
     @property
     def is_simple(self) -> bool:
-        """Single plain run -> rendered by the legacy (golden-tested) path."""
-        return len(self.segments) == 1 and self.segments[0].is_plain
+        """Single run, at most a font-size override -> rendered by the
+        legacy (golden-tested) path, which keeps optical / monospaced
+        kerning."""
+        if len(self.segments) != 1 or self.dx_mm or self.dy_mm:
+            return False
+        s = self.segments[0]
+        return (not s.dy_mm and not s.gap_mm and s.tracking is None
+                and s.color is None and s.font_family is None
+                and s.font_style is None)

@@ -65,13 +65,16 @@ def test_svg_structure_and_layers(tmp_path):
     layers = [g.get("id") for g in root.findall("s:g", NS)]
     assert layers == ["Fond", "Numeros", "Reperes"]
     texts = root.findall(".//s:g[@id='Numeros']//s:text", NS)
-    assert len(texts) == 3                         # "1", "14", "-1"
-    sizes = sorted(float(t.get("font-size")) for t in texts)
+    assert len(texts) == 2                         # ONE block per tile
+    assert "".join(texts[1].itertext()) == "14-1"  # composite = one text
+    spans = texts[1].findall("s:tspan", NS)
+    sizes = sorted(float(t.get("font-size", texts[1].get("font-size")))
+                   for t in spans)
     assert sizes[0] == pytest.approx(28, abs=0.2)   # the small "-1" run
     assert sizes[-1] == pytest.approx(70, abs=0.2)
     assert "ArialMT" in texts[0].get("font-family")
     lines = root.findall(".//s:g[@id='Reperes']//s:line", NS)
-    assert len(lines) == 2 * 16
+    assert len(lines) == 2 * (16 + 8)     # corners + centre crosses
     # backgrounds are deduplicated: one def for two tiles
     assert len(root.findall("s:defs/*", NS)) == 1
 
@@ -134,3 +137,122 @@ def test_svg_matches_raster_layout(tmp_path, label, design_kw, segs):
     # same ink box within a few px (hinting / sub-pixel positioning)
     for ea, eb in zip(a, b):
         assert abs(ea - eb) <= 4, (label, a, b)
+
+
+def _items_many(tmp_path, n):
+    d = _design(h.make_template(str(tmp_path / "t.png")))
+    return [SheetItem(d, [Segment(str(i + 1))]) for i in range(n)]
+
+
+def test_single_file_stacks_all_pages(tmp_path):
+    grid = _grid()
+    items = _items_many(tmp_path, grid.per_page + 2)       # -> 2 pages
+    paths = gs.export_svg_pages(items, grid, FONT, gs.SvgOptions(),
+                                str(tmp_path / "sheet"), single_file=True)
+    assert [os.path.basename(p) for p in paths] == ["sheet.svg"]
+    root = ET.parse(paths[0]).getroot()
+    page_h = 210 * 72 / 25.4
+    assert float(root.get("height")) == pytest.approx(
+        2 * page_h + 36, abs=0.05)
+    for layer in ("Fond", "Numeros", "Reperes"):
+        pages = root.findall(f".//s:g[@id='{layer}']/s:g", NS)
+        assert [g.get("id") for g in pages] == ["Page-1", "Page-2"]
+    # second page's tiles sit below the first page
+    fond2 = root.findall(".//s:g[@id='Page-2']/s:g", NS)[0]
+    assert float(fond2.get("transform").split()[1].rstrip(")")) > page_h
+
+
+def test_one_file_per_page_when_asked(tmp_path):
+    grid = _grid()
+    items = _items_many(tmp_path, grid.per_page + 1)
+    paths = gs.export_svg_pages(items, grid, FONT, gs.SvgOptions(),
+                                str(tmp_path / "sheet"), single_file=False)
+    assert [os.path.basename(p) for p in paths] == [
+        "sheet_p1.svg", "sheet_p2.svg"]
+
+
+def test_single_page_has_no_page_wrapper(tmp_path):
+    svg = gs.build_page_svg(_items_many(tmp_path, 2), _grid(), FONT,
+                            gs.SvgOptions())
+    assert "Page-1" not in svg
+
+
+def test_border_crop_hides_baked_in_frame(tmp_path):
+    """The template has a black frame at its edge; cropping the tile edge
+    in the SVG must remove it, without touching the artwork inside."""
+    items = _items_many(tmp_path, 1)
+    grid = _grid()
+    dpi = 300
+    px = dpi / 25.4
+    ox, oy = grid.origin_mm(0)
+
+    def edge_dark(crop):
+        svg = gs.build_page_svg(items, grid, FONT, gs.SvgOptions(
+            marks="none", border_crop_mm=crop, layout_dpi=dpi))
+        w = round(297 * px)
+        img = _resvg(svg, w, round(210 * px))
+        # a point on the left frame line (px 2-4 of 400 -> 0.3-0.75 mm)
+        x = round((ox + 0.5) * px)
+        y = round((oy + 30) * px)
+        return img.getpixel((x, y)) < 100
+    assert edge_dark(0.0) is True
+    assert edge_dark(0.8) is False
+
+
+def test_border_crop_clip_is_defined_once(tmp_path):
+    svg = gs.build_page_svg(_items_many(tmp_path, 3), _grid(), FONT,
+                            gs.SvgOptions(border_crop_mm=0.8))
+    assert svg.count("<clipPath") == 1
+    assert svg.count('clip-path="url(#tile-clip)"') == 3
+
+
+def test_center_mark_lines_geometry():
+    lines = gs.center_mark_lines(0, 0, 100, 100, bleed=3, length=10)
+    assert len(lines) == 8                        # 4 sides x (line + tick)
+    # top side: cross centred at x=50, y=-6.5 (half-way across the band)
+    assert (50 - 12.5, -6.5, 50 + 12.5, -6.5) in lines
+    assert (50, -6.5 - 5, 50, -6.5 + 5) in lines
+    # left side: cross centred at y=50, x=-6.5
+    assert (-6.5, 50 - 12.5, -6.5, 50 + 12.5) in lines
+    assert (-6.5 - 5, 50, -6.5 + 5, 50) in lines
+    # nothing enters the tile, and ticks stop `bleed` short of the trim edge
+    for xa, ya, xb, yb in lines:
+        for x, y in ((xa, ya), (xb, yb)):
+            assert not (0 < x < 100 and 0 < y < 100)
+    ticks_top = [l for l in lines if l[0] == l[2] == 50 and l[1] < 0]
+    assert ticks_top and max(ticks_top[0][1], ticks_top[0][3]) == -1.5
+
+
+def test_center_marks_can_be_turned_off(tmp_path):
+    d = _design(_white(tmp_path))
+    it = [SheetItem(d, [Segment("1")])]
+    svg = gs.build_page_svg(it, _grid(), FONT,
+                            gs.SvgOptions(center_marks=False))
+    root = ET.fromstring(svg)
+    assert len(root.findall(".//s:g[@id='Reperes']//s:line", NS)) == 16
+
+
+@pytest.mark.parametrize("kw,segs,label", [
+    (dict(), [Segment("55")], "55"),
+    (dict(tracking=12), [Segment("55")], "55"),
+    (dict(kern_mode="等幅"), [Segment("17")], "17"),
+    (dict(kern_mode="オプティカル"), [Segment("77")], "77"),
+    (dict(), [Segment("15"), Segment("-2", pt=28, dy_mm=1, gap_mm=0.5)],
+     "15-2"),
+])
+def test_label_is_one_editable_text_block(tmp_path, kw, segs, label):
+    """Illustrator turns per-glyph x lists into one object per character;
+    the label must stay a single <text> with no x/dx lists."""
+    d = _design(_white(tmp_path), **kw)
+    svg = gs.build_page_svg([SheetItem(d, segs)], _grid(), FONT,
+                            gs.SvgOptions(marks="none"))
+    root = ET.fromstring(svg)
+    texts = root.findall(".//s:g[@id='Numeros']//s:text", NS)
+    assert len(texts) == 1
+    t = texts[0]
+    assert "".join(t.itertext()) == label
+    assert " " not in t.get("x")                 # a single x, not a list
+    assert all(" " not in (sp.get("x") or "") and sp.get("dx") is None
+               for sp in t.iter(f"{{{gs.SVG_NS}}}tspan"))
+    if len(segs) > 1:                             # raised suffix
+        assert any(sp.get("baseline-shift") for sp in t.findall("s:tspan", NS))

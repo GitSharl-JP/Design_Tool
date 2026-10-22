@@ -114,6 +114,7 @@ from app.engines.guidemark_render import (
     apply_k_convert, render_item)
 from app.engines.guidemark_layout import PAPER_MM, make_grid, render_pages
 from app.engines.guidemark_svg import SvgOptions, export_svg_pages
+from app.engines.guidemark_paste import parse_labels
 from app.engines.vector_template import (
     FILE_PATTERNS as _TPL_PATTERNS, load_thumbnail)
 from app.engines.font_jp import (
@@ -4812,7 +4813,7 @@ class GuideMarkWizard(tk.Toplevel):
         self._num_lock      = tk.BooleanVar(value=False)  # lock ratio on tile resize
         self._tile_w_prev   = 100.0   # previous tile_w for lock scaling
         self._tile_h_prev   = 100.0   # previous tile_h for lock scaling
-        self._preview_num   = tk.IntVar(value=1)
+        self._preview_num   = tk.StringVar(value="1")   # label, e.g. 14 or 14-1
         # ── Display helpers (driven by traces after _build) ────────────────
         self._pos_x_pct_str  = tk.StringVar(value="50%")
         self._pos_y_pct_str  = tk.StringVar(value="42%")
@@ -4839,8 +4840,11 @@ class GuideMarkWizard(tk.Toplevel):
         # Illustrator (SVG) export
         self._svg_marks       = tk.StringVar(value="tombo")
         self._svg_bleed       = tk.DoubleVar(value=3.0)
-        self._svg_mark_len    = tk.DoubleVar(value=2.0)
+        self._svg_mark_len    = tk.DoubleVar(value=10.0)
+        self._svg_center      = tk.BooleanVar(value=True)
         self._svg_outline     = tk.BooleanVar(value=False)
+        self._svg_single      = tk.BooleanVar(value=True)   # one file for all pages
+        self._svg_border_crop = tk.DoubleVar(value=0.8)     # hide baked-in frame
         self._preset_name     = tk.StringVar(value="")
         self._presets: list   = self._load_presets()
         self._thumb_cache: dict = {}
@@ -4990,7 +4994,10 @@ class GuideMarkWizard(tk.Toplevel):
             "svg_marks":     self._svg_marks.get(),
             "svg_bleed":     self._svg_bleed.get(),
             "svg_mark_len":  self._svg_mark_len.get(),
+            "svg_center":    self._svg_center.get(),
             "svg_outline":   self._svg_outline.get(),
+            "svg_single":    self._svg_single.get(),
+            "svg_border_crop": self._svg_border_crop.get(),
             "template_path": self._selected_tpl.get("path", ""),
             "template3_path": self._selected_tpl3.get("path", ""),
         }
@@ -5028,7 +5035,10 @@ class GuideMarkWizard(tk.Toplevel):
         _s(self._svg_marks,     "svg_marks")
         _s(self._svg_bleed,     "svg_bleed")
         _s(self._svg_mark_len,  "svg_mark_len")
+        _s(self._svg_center,    "svg_center")
         _s(self._svg_outline,   "svg_outline")
+        _s(self._svg_single,    "svg_single")
+        _s(self._svg_border_crop, "svg_border_crop")
         tp = d.get("template_path", "")
         if tp and os.path.isfile(tp):
             self._selected_tpl = {
@@ -5407,6 +5417,8 @@ class GuideMarkWizard(tk.Toplevel):
             lp,
             make_range_items=self._make_range_items,
             make_seed_item=self._make_seed_item,
+            make_label_items=self._make_label_items,
+            get_design=self._sheet_design,
             families=sorted(_get_font_families().keys()),
             render_preview=self._render_item_preview,
             on_change=lambda: self._schedule_layout_preview(100))
@@ -5866,10 +5878,26 @@ class GuideMarkWizard(tk.Toplevel):
         row(_t("gmw.svg_marks"), _svg_marks_w)
         row(_t("gmw.svg_bleed"), lambda p: _mm(p, self._svg_bleed))
         row(_t("gmw.svg_arm"),   lambda p: _mm(p, self._svg_mark_len))
+        cm = tk.Frame(lp, bg=BG2)
+        cm.pack(fill="x", **P)
+        tk.Checkbutton(cm, text=_t("gmw.svg_center"),
+                       variable=self._svg_center, bg=BG2, fg=FG,
+                       selectcolor=BG3, activebackground=BG2,
+                       font=FONT_SM).pack(side="left")
+        row(_t("gmw.svg_crop"),  lambda p: _mm(p, self._svg_border_crop))
+        tk.Label(lp, text=_t("gmw.svg_crop_hint"), bg=BG2, fg=FG3,
+                 font=FONT_HINT, wraplength=300, justify="left").pack(
+                     anchor="w", padx=16)
         ol = tk.Frame(lp, bg=BG2)
         ol.pack(fill="x", **P)
         tk.Checkbutton(ol, text=_t("gmw.svg_outline"),
                        variable=self._svg_outline, bg=BG2, fg=FG,
+                       selectcolor=BG3, activebackground=BG2,
+                       font=FONT_SM).pack(side="left")
+        one = tk.Frame(lp, bg=BG2)
+        one.pack(fill="x", **P)
+        tk.Checkbutton(one, text=_t("gmw.svg_single"),
+                       variable=self._svg_single, bg=BG2, fg=FG,
                        selectcolor=BG3, activebackground=BG2,
                        font=FONT_SM).pack(side="left")
 
@@ -5929,6 +5957,8 @@ class GuideMarkWizard(tk.Toplevel):
         else:
             self._btn_next.configure(text="", state="disabled", bg=BG2)
         if n == 1:
+            self._sheet_panel.set_designs(
+                [p.get("name", "") for p in self._presets if p.get("name")])
             self._update_step1_template_display()
             self._schedule_tile_preview(300)
         elif n == 2:
@@ -6077,19 +6107,47 @@ class GuideMarkWizard(tk.Toplevel):
         return (self._preset_name.get().strip()
                 or self._selected_tpl.get("name", "") or "design")
 
+    def _sheet_design(self):
+        """(Design, name) for NEW tiles: the preset picked in the sheet's
+        selector, else the design currently being edited."""
+        panel = getattr(self, "_sheet_panel", None)
+        wanted = panel.chosen_design() if panel is not None else ""
+        for preset in self._presets:
+            if wanted and preset.get("name") == wanted:
+                return Design.from_preset(preset), wanted
+        return self._design(), self._design_name()
+
     def _make_range_items(self) -> list:
-        """One sheet item per number of the Numbers field, current design."""
-        design, name = self._design(), self._design_name()
+        """One sheet item per number of the Numbers field."""
+        design, name = self._sheet_design()
         return [SheetItem(design, [Segment(str(n))], name)
                 for n in self._parse_range()]
 
     def _make_seed_item(self) -> SheetItem:
         """Starting point for the composite editor: 'N' + small '-1'."""
-        sub_pt = max(4, round(self._num_fsize_pt.get() * 0.4))
-        return SheetItem(self._design(),
+        design, name = self._sheet_design()
+        sub_pt = max(4, round(design.fsize_pt * 0.4))
+        return SheetItem(design,
                          [Segment(str(self._parse_range()[0])),
-                          Segment("-1", pt=sub_pt)],
-                         self._design_name())
+                          Segment("-1", pt=sub_pt)], name)
+
+    def _make_label_items(self, labels: list, current: bool = False,
+                          main_pt=None, sub_pt=None) -> list:
+        """Tiles for pasted labels; extra runs (e.g. '-1') get a smaller
+        size (40% of the main one, same as the composite editor's seed).
+        `current=True` forces the design being edited (step 1 preview)."""
+        design, name = ((self._design(), self._design_name()) if current
+                        else self._sheet_design())
+        auto_sub = max(4, round((main_pt or design.fsize_pt) * 0.4))
+        items = []
+        for runs in labels:
+            composite = len(runs) > 1
+            items.append(SheetItem(
+                design,
+                [Segment(run, pt=(sub_pt or auto_sub) if i
+                         else (main_pt if composite else None))
+                 for i, run in enumerate(runs)], name))
+        return items
 
     def _render_item_preview(self, item: SheetItem):
         tw = max(10, round(self._tile_w.get() / 25.4 * 150))
@@ -6141,10 +6199,11 @@ class GuideMarkWizard(tk.Toplevel):
         ch = self._tile_canvas.winfo_height()
         if cw < 10 or ch < 10:
             return
-        n  = max(1, self._preview_num.get())
+        labels = parse_labels(self._preview_num.get()) or [["1"]]
+        item = self._make_label_items(labels[:1], current=True)[0]
         tw = max(10, round(self._tile_w.get() / 25.4 * 150))
         th = max(10, round(self._tile_h.get() / 25.4 * 150))
-        tile = self._render_tile(n, tw, th, 150)
+        tile = render_item(item, tw, th, 150, self._font_path)
         if self._monochrome.get():
             tile = self._apply_k_convert(tile)
         scale = min(cw / tw, ch / th, 1.0)
@@ -6312,15 +6371,21 @@ class GuideMarkWizard(tk.Toplevel):
         dpi = max(72, self._dpi.get())
         opts = SvgOptions(
             marks=marks, bleed_mm=bleed, mark_len_mm=arm,
+            center_marks=self._svg_center.get(),
             outline_text=self._svg_outline.get(),
             monochrome=self._monochrome.get(), k_pct=self._k_pct.get(),
-            raster_dpi=dpi, layout_dpi=dpi)
+            raster_dpi=dpi, layout_dpi=dpi,
+            # the frame baked into a design is only hidden once cut marks
+            # replace it
+            border_crop_mm=(self._svg_border_crop.get()
+                            if marks != "none" else 0.0))
         base = os.path.splitext(
             self._export_name.get().strip() or "guidemark_layout")[0]
         try:
             paths = export_svg_pages(self._sheet_items(), grid,
                                      self._font_path, opts,
-                                     os.path.join(out_dir, base))
+                                     os.path.join(out_dir, base),
+                                     single_file=self._svg_single.get())
         except Exception as e:
             log.exception("SVG export failed")
             messagebox.showerror(_t("gmw.title"), str(e), parent=self)

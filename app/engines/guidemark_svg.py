@@ -41,13 +41,17 @@ MAX_EMBED_BYTES = 20 * 1024 * 1024
 class SvgOptions:
     marks: str = "tombo"           # 'tombo' | 'rect' | 'none'
     bleed_mm: float = 3.0          # trim -> bleed distance (tombo)
-    mark_len_mm: float = 2.0       # length of each tombo arm
+    mark_len_mm: float = 10.0      # length of each tombo arm
+    center_marks: bool = True      # centre crosses at the middle of each side
     mark_pt: float = 0.25          # stroke width of the marks
     outline_text: bool = False     # convert numbers to outlines
     monochrome: bool = False
     k_pct: int = 70
     raster_dpi: int = 300          # resolution of rasterised backgrounds
     layout_dpi: int = 300          # dpi the text layout is computed at (= print dpi)
+    border_crop_mm: float = 0.0    # clip this much off each tile edge (hides
+                                   # a frame baked into the artwork)
+    page_gap_pt: float = 36.0      # space between stacked pages (one-file export)
 
 
 # ── fonts ────────────────────────────────────────────────────────────────
@@ -198,6 +202,25 @@ def tombo_lines(x0, y0, x1, y1, bleed, length) -> list:
     return out
 
 
+def center_mark_lines(x0, y0, x1, y1, bleed, length) -> list:
+    """The four centre crosses (センタートンボ), one per side, outside the
+    trim box. Each cross sits half-way across the corner-mark band
+    (`bleed + length`); its line parallel to the side is 2.5x `length`
+    long, the tick across it `length` long.
+    Returns [(xa, ya, xb, yb), ...]."""
+    d = (bleed + length) / 2
+    along, tick = 1.25 * length, length / 2
+    cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+    out = []
+    for y in (y0 - d, y1 + d):                       # top / bottom
+        out.append((cx - along, y, cx + along, y))
+        out.append((cx, y - tick, cx, y + tick))
+    for x in (x0 - d, x1 + d):                       # left / right
+        out.append((x, cy - along, x, cy + along))
+        out.append((x - tick, cy, x + tick, cy))
+    return out
+
+
 # ── text ─────────────────────────────────────────────────────────────────
 def _baseline_pt(op, dpi: int) -> float:
     asc, desc = op.font.getmetrics()
@@ -210,13 +233,97 @@ def _baseline_pt(op, dpi: int) -> float:
     return base * 72 / dpi
 
 
+def _style(op, opts: SvgOptions) -> tuple:
+    """(font-family attr, size pt, fill) of an op."""
+    ps = postscript_name(op.font)
+    fam, _sty = _font_names(op.font)
+    family = ps + ", " + fam if fam and fam != ps else ps
+    fill = _hex(op.fill)
+    if opts.monochrome:
+        fill = _mono_hex(fill, opts.k_pct)
+    return family, op.font.size * 72 / opts.layout_dpi, fill
+
+
+def _tile_text(ops: list, ox_pt: float, oy_pt: float,
+               opts: SvgOptions) -> str:
+    """ONE <text> element for the whole label, so it is a single editable
+    block in Illustrator (retype "15-2" in one go).
+
+    Each style run (size / font / colour / baseline) is a <tspan>; glyph
+    spacing is expressed with letter-spacing (tracking), and a raised run
+    with baseline-shift — never per-glyph x lists, which Illustrator
+    explodes into one text object per character. Spacings are derived from
+    the real glyph positions, so tracking, optical and monospaced kerning
+    reproduce the raster layout.
+    """
+    dpi, px = opts.layout_dpi, 72 / opts.layout_dpi
+    base0 = _baseline_pt(ops[0], dpi)
+    # spacing (px) after each op = distance to the next op's origin
+    # beyond this op's own advance
+    sp = [ops[i + 1].x - (ops[i].x + ops[i].font.getlength(ops[i].text))
+          for i in range(len(ops) - 1)] + [0.0]
+
+    # consecutive ops sharing font/colour/baseline form one style run
+    runs, i = [], 0
+    while i < len(ops):
+        j = i
+        while (j + 1 < len(ops) and ops[j + 1].font is ops[i].font
+               and ops[j + 1].fill == ops[i].fill
+               and abs(_baseline_pt(ops[j + 1], dpi)
+                       - _baseline_pt(ops[i], dpi)) < 0.01):
+            j += 1
+        runs.append((i, j))
+        i = j + 1
+
+    text_style = _style(ops[0], opts)
+    spans = []
+    for i, j in runs:
+        op0 = ops[i]
+        fam, size, fill = _style(op0, opts)
+        shift = base0 - _baseline_pt(op0, dpi)          # + = raised
+        attrs = ""
+        if (fam, size, fill) != text_style:
+            attrs += (f' font-family={quoteattr(fam)} '
+                      f'font-size="{_f(size)}" fill="{fill}"')
+        if abs(shift) > 0.01:
+            attrs += f' baseline-shift="{_f(shift)}"'
+
+        def span(chunk, spacing_px):
+            txt = escape("".join(o.text for o in chunk))
+            ls = (f' letter-spacing="{_f(spacing_px * px)}"'
+                  if abs(spacing_px) > 0.01 else "")
+            return f"<tspan{attrs}{ls}>{txt}</tspan>"
+
+        inner = sp[i:j]                  # spacings between this run's ops
+        if i == j:
+            spans.append(span(ops[i:j + 1], sp[j]))
+        elif max(inner) - min(inner) <= 1.5:      # uniform tracking
+            mean = sum(inner) / len(inner)
+            if j == len(ops) - 1 or abs(sp[j] - mean) <= 1.5:
+                # the spacing after the last glyph is irrelevant (end of
+                # label) or equal to the tracking: keep the run whole
+                spans.append(span(ops[i:j + 1], mean))
+            else:
+                spans.append(span(ops[i:j], mean))
+                spans.append(span(ops[j:j + 1], sp[j]))
+        else:                                     # optical / monospaced
+            spans.extend(span(ops[k:k + 1], sp[k]) for k in range(i, j + 1))
+
+    fam, size, fill = text_style
+    return (f'<text x="{_f(ox_pt + ops[0].x * px)}" '
+            f'y="{_f(oy_pt + base0)}" font-family={quoteattr(fam)} '
+            f'font-size="{_f(size)}" fill="{fill}" '
+            f'xml:space="preserve">{"".join(spans)}</text>')
+
+
 def _text_group(ops: list, ox_pt: float, oy_pt: float,
                 opts: SvgOptions) -> list:
-    """SVG elements for one tile's ops (consecutive same-style glyphs
-    share one <text> with an x list)."""
-    px = 72 / opts.layout_dpi
-    out = []
+    """SVG elements for one tile's label: a single live <text>, or
+    per-glyph outlines when `opts.outline_text`."""
+    if not ops:
+        return []
     if opts.outline_text:
+        out = []
         for op in ops:
             x = op.x
             for ch in op.text:
@@ -224,32 +331,7 @@ def _text_group(ops: list, ox_pt: float, oy_pt: float,
                 out.append(_outline(d, upem, op, x, ox_pt, oy_pt, opts))
                 x += op.font.getlength(ch)
         return out
-
-    i = 0
-    while i < len(ops):
-        j = i
-        while (j + 1 < len(ops) and ops[j + 1].font is ops[i].font
-               and ops[j + 1].anchor == ops[i].anchor
-               and ops[j + 1].fill == ops[i].fill
-               and ops[j + 1].y == ops[i].y):
-            j += 1
-        run = ops[i:j + 1]
-        first = run[0]
-        fill = _hex(first.fill)
-        if opts.monochrome:
-            fill = _mono_hex(fill, opts.k_pct)
-        xs = " ".join(_f(ox_pt + op.x * px) for op in run)
-        text = "".join(op.text for op in run)
-        ps = postscript_name(first.font)
-        fam, _sty = _font_names(first.font)
-        size_pt = first.font.size * px
-        out.append(
-            f'<text x="{xs}" y="{_f(oy_pt + _baseline_pt(first, opts.layout_dpi))}" '
-            f'font-family={quoteattr(ps + ", " + fam if fam and fam != ps else ps)} '
-            f'font-size="{_f(size_pt)}" fill="{fill}" '
-            f'xml:space="preserve">{escape(text)}</text>')
-        i = j + 1
-    return out
+    return [_tile_text(ops, ox_pt, oy_pt, opts)]
 
 
 def _outline(d, upem, op, x_px, ox_pt, oy_pt, opts) -> str:
@@ -264,78 +346,117 @@ def _outline(d, upem, op, x_px, ox_pt, oy_pt, opts) -> str:
 
 
 # ── page / document ──────────────────────────────────────────────────────
-def build_page_svg(items: list, grid: Grid, font_path,
-                   opts: SvgOptions) -> str:
-    """SVG markup for the tiles of ONE page (`items` = that page's items)."""
-    w_pt = grid.pw_mm * PT_PER_MM
-    h_pt = grid.ph_mm * PT_PER_MM
+def build_svg(pages: list, grid: Grid, font_path, opts: SvgOptions) -> str:
+    """One SVG document holding every page (`pages` = list of item lists).
+
+    Several pages are stacked vertically with `opts.page_gap_pt` between
+    them; each page is a sub-group (``Page-1`` ...) inside the three
+    layers, so Illustrator keeps one layer per kind of content.
+    """
+    pw_pt = grid.pw_mm * PT_PER_MM
+    ph_pt = grid.ph_mm * PT_PER_MM
     tw_pt = grid.tile_w_mm * PT_PER_MM
     th_pt = grid.tile_h_mm * PT_PER_MM
     dpi = opts.layout_dpi
     tw_px = max(1, round(grid.tile_w_mm / 25.4 * dpi))
     th_px = max(1, round(grid.tile_h_mm / 25.4 * dpi))
+    crop = max(0.0, opts.border_crop_mm) * PT_PER_MM
+    stacked = len(pages) > 1
 
     defs, bg_ids = [], {}
-    fond, nums, reperes = [], [], []
-    for i, item in enumerate(items):
-        ox, oy = (v * PT_PER_MM for v in grid.origin_mm(i))
-        path = _template_for(item.design, len(item.segments[0].text) >= 3)
-        if path not in bg_ids:
-            bg_ids[path] = f"bg{len(bg_ids) + 1}"
-            defs.append(_background_defs(
-                path, bg_ids[path], tw_pt, th_pt,
-                grid.tile_w_mm, grid.tile_h_mm, opts))
-        tag = f"tile-{i + 1:03d}"
-        use = f'<use xlink:href="#{bg_ids[path]}" x="{_f(ox)}" y="{_f(oy)}"'
-        if path and vt.kind(path) == "svg" and not opts.monochrome:
-            use += f' width="{_f(tw_pt)}" height="{_f(th_pt)}"'
-        fond.append(f'<g id="{tag}-fond">{use}/></g>')
+    if crop > 0:
+        defs.append(
+            f'<clipPath id="tile-clip"><rect x="{_f(crop)}" y="{_f(crop)}" '
+            f'width="{_f(tw_pt - 2 * crop)}" '
+            f'height="{_f(th_pt - 2 * crop)}"/></clipPath>')
+    fond_pages, nums_pages, rep_pages = [], [], []
+    for pn, items in enumerate(pages):
+        page_y = pn * (ph_pt + opts.page_gap_pt)
+        fond, nums, reperes = [], [], []
+        for i, item in enumerate(items):
+            ox, oy = grid.origin_mm(i)
+            ox, oy = ox * PT_PER_MM, oy * PT_PER_MM + page_y
+            path = _template_for(item.design,
+                                 len(item.segments[0].text) >= 3)
+            if path not in bg_ids:
+                bg_ids[path] = f"bg{len(bg_ids) + 1}"
+                defs.append(_background_defs(
+                    path, bg_ids[path], tw_pt, th_pt,
+                    grid.tile_w_mm, grid.tile_h_mm, opts))
+            tag = f"p{pn + 1}-tile-{i + 1:03d}" if stacked \
+                else f"tile-{i + 1:03d}"
+            use = f'<use xlink:href="#{bg_ids[path]}" x="0" y="0"'
+            if path and vt.kind(path) == "svg" and not opts.monochrome:
+                use += f' width="{_f(tw_pt)}" height="{_f(th_pt)}"'
+            clip = ' clip-path="url(#tile-clip)"' if crop > 0 else ""
+            fond.append(f'<g id="{tag}-fond" transform="translate('
+                        f'{_f(ox)} {_f(oy)})"{clip}>{use}/></g>')
 
-        ops = item_ops(item, tw_px, th_px, dpi, font_path)
-        label = escape(item.text)
-        nums.append(f'<g id="{tag}-{label}">'
-                    + "".join(_text_group(ops, ox, oy, opts)) + "</g>")
+            ops = item_ops(item, tw_px, th_px, dpi, font_path)
+            label = escape(item.text)
+            nums.append(f'<g id="{tag}-{label}">'
+                        + "".join(_text_group(ops, ox, oy, opts)) + "</g>")
 
-        x0, y0, x1, y1 = ox, oy, ox + tw_pt, oy + th_pt
-        sw = _f(opts.mark_pt)
-        if opts.marks == "tombo":
-            lines = tombo_lines(x0, y0, x1, y1,
-                                opts.bleed_mm * PT_PER_MM,
-                                opts.mark_len_mm * PT_PER_MM)
-            body = "".join(
-                f'<line x1="{_f(a)}" y1="{_f(b)}" x2="{_f(c)}" y2="{_f(d)}"/>'
-                for a, b, c, d in lines)
-            reperes.append(f'<g id="{tag}-tombo" fill="none" stroke="#000000" '
-                           f'stroke-width="{sw}">{body}</g>')
-        elif opts.marks == "rect":
-            reperes.append(
-                f'<rect id="{tag}-cut" x="{_f(x0)}" y="{_f(y0)}" '
-                f'width="{_f(tw_pt)}" height="{_f(th_pt)}" fill="none" '
-                f'stroke="#000000" stroke-width="{sw}"/>')
+            x0, y0, x1, y1 = ox, oy, ox + tw_pt, oy + th_pt
+            sw = _f(opts.mark_pt)
+            if opts.marks == "tombo":
+                bl, ln = opts.bleed_mm * PT_PER_MM, opts.mark_len_mm * PT_PER_MM
+                lines = tombo_lines(x0, y0, x1, y1, bl, ln)
+                if opts.center_marks:
+                    lines += center_mark_lines(x0, y0, x1, y1, bl, ln)
+                body = "".join(
+                    f'<line x1="{_f(a)}" y1="{_f(b)}" x2="{_f(c)}" '
+                    f'y2="{_f(d)}"/>' for a, b, c, d in lines)
+                reperes.append(
+                    f'<g id="{tag}-tombo" fill="none" stroke="#000000" '
+                    f'stroke-width="{sw}">{body}</g>')
+            elif opts.marks == "rect":
+                reperes.append(
+                    f'<rect id="{tag}-cut" x="{_f(x0)}" y="{_f(y0)}" '
+                    f'width="{_f(tw_pt)}" height="{_f(th_pt)}" fill="none" '
+                    f'stroke="#000000" stroke-width="{sw}"/>')
+        for bucket, acc in ((fond, fond_pages), (nums, nums_pages),
+                            (reperes, rep_pages)):
+            acc.append(f'<g id="Page-{pn + 1}">{"".join(bucket)}</g>'
+                       if stacked else "".join(bucket))
 
+    total_h = len(pages) * ph_pt + (len(pages) - 1) * opts.page_gap_pt
     return (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
         f'<svg xmlns="{SVG_NS}" xmlns:xlink="{XLINK_NS}" version="1.1" '
-        f'width="{_f(w_pt)}" height="{_f(h_pt)}" '
-        f'viewBox="0 0 {_f(w_pt)} {_f(h_pt)}">\n'
+        f'width="{_f(pw_pt)}" height="{_f(total_h)}" '
+        f'viewBox="0 0 {_f(pw_pt)} {_f(total_h)}">\n'
         f'<defs>{"".join(defs)}</defs>\n'
-        f'<g id="Fond">{"".join(fond)}</g>\n'
-        f'<g id="Numeros">{"".join(nums)}</g>\n'
-        f'<g id="Reperes">{"".join(reperes)}</g>\n'
+        f'<g id="Fond">{"".join(fond_pages)}</g>\n'
+        f'<g id="Numeros">{"".join(nums_pages)}</g>\n'
+        f'<g id="Reperes">{"".join(rep_pages)}</g>\n'
         '</svg>\n')
 
 
-def export_svg_pages(items: list, grid: Grid, font_path, opts: SvgOptions,
-                     out_base: str) -> list:
-    """Write one SVG per page next to `out_base` (no extension). Returns
-    the written paths."""
+def build_page_svg(items: list, grid: Grid, font_path,
+                   opts: SvgOptions) -> str:
+    """SVG markup for the tiles of ONE page (`items` = that page's items)."""
+    return build_svg([items], grid, font_path, opts)
+
+
+def split_pages(items: list, grid: Grid) -> list:
     per = grid.per_page
-    chunks = [items[i:i + per] for i in range(0, max(1, len(items)), per)]
+    return [items[i:i + per] for i in range(0, max(1, len(items)), per)]
+
+
+def export_svg_pages(items: list, grid: Grid, font_path, opts: SvgOptions,
+                     out_base: str, single_file: bool = True) -> list:
+    """Write the sheet next to `out_base` (no extension): ONE svg with all
+    pages stacked (`single_file`) or one svg per page. Returns the paths."""
+    pages = split_pages(items, grid)
+    if single_file or len(pages) == 1:
+        groups = [(f"{out_base}.svg", pages)]
+    else:
+        groups = [(f"{out_base}_p{n + 1}.svg", [pg])
+                  for n, pg in enumerate(pages)]
     paths = []
-    for n, chunk in enumerate(chunks):
-        suffix = f"_p{n + 1}" if len(chunks) > 1 else ""
-        path = f"{out_base}{suffix}.svg"
+    for path, pgs in groups:
         with open(path, "w", encoding="utf-8") as fh:
-            fh.write(build_page_svg(chunk, grid, font_path, opts))
+            fh.write(build_svg(pgs, grid, font_path, opts))
         paths.append(path)
     return paths

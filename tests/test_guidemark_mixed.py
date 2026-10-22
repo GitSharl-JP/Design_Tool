@@ -102,3 +102,67 @@ def test_overflow_makes_second_page(tmp_path):
         items, grid, 50,
         lambda it, tw, th, dpi: render_item(it, tw, th, dpi, FONT))
     assert len(pages) == 2
+
+
+def _boxes(item, dpi=300, size=600):
+    return _ink_boxes(render_item(item, size, size, dpi, FONT))
+
+
+def test_composite_gap_moves_only_the_suffix(tmp_path):
+    d = _design(_solid(tmp_path / "w.png", "white"), pos_y=50)
+
+    def boxes(gap):
+        return _boxes(SheetItem(d, [Segment("14"), Segment(
+            "-1", pt=28, gap_mm=gap, color="#ff0000")]))
+    big0, small0 = boxes(0)
+    big2, small2 = boxes(2)
+    px = round(2 / 25.4 * 300)
+    # group stays centred: the gap widens it, so main goes left by px/2 and
+    # the suffix right by px/2
+    assert abs((small2[0] - small0[0]) - px / 2) <= 2
+    assert abs((big0[0] - big2[0]) - px / 2) <= 2
+
+
+def test_group_offset_shifts_everything(tmp_path):
+    d = _design(_solid(tmp_path / "w.png", "white"), pos_y=50)
+    segs = [Segment("14"), Segment("-1", pt=28, color="#ff0000")]
+    base = _boxes(SheetItem(d, list(segs)))
+    moved = _boxes(SheetItem(d, list(segs), dx_mm=3, dy_mm=2))
+    for b, m in zip(base, moved):
+        assert abs((m[0] - b[0]) - 3 / 25.4 * 300) <= 1.5
+        assert abs((b[1] - m[1]) - 2 / 25.4 * 300) <= 1.5   # + = up
+
+
+def test_center_main_keeps_main_number_centred(tmp_path):
+    d = _design(_solid(tmp_path / "w.png", "white"), pos_y=50)
+    segs = [Segment("14"), Segment("-1", pt=28, color="#ff0000")]
+
+    def main_center_off(center_main):
+        big, _small = _boxes(SheetItem(d, list(segs),
+                                       center_main=center_main))
+        return (big[0] + big[2]) / 2 - 300
+    # centred by advance width (side bearings), so allow ~1 mm of ink offset
+    assert abs(main_center_off(True)) <= 12
+    assert main_center_off(False) < -20               # pushed left by suffix
+
+
+def test_single_run_size_override_matches_design_size(tmp_path):
+    """A per-tile pt override must equal rendering with that design size
+    (and stay on the legacy path, so optical kerning etc. are kept)."""
+    tpl = h.make_template(str(tmp_path / "t.png"))
+    base = _design(tpl, fsize_pt=120, kern_mode="オプティカル", tracking=4)
+    item = SheetItem(base, [Segment("14", pt=95)])
+    assert item.is_simple
+    want = render_tile(_design(tpl, fsize_pt=95, kern_mode="オプティカル",
+                               tracking=4), "14", 400, 400, 150, FONT)
+    got = render_item(item, 400, 400, 150, FONT)
+    assert ImageChops.difference(got, want).getbbox() is None
+
+
+def test_size_override_on_three_digits_uses_override(tmp_path):
+    tpl = h.make_template(str(tmp_path / "t.png"))
+    d = _design(tpl, fsize3_pt=50)
+    small = render_item(SheetItem(d, [Segment("100")]), 400, 400, 150, FONT)
+    big = render_item(SheetItem(d, [Segment("100", pt=90)]), 400, 400, 150,
+                      FONT)
+    assert ImageChops.difference(small, big).getbbox() is not None

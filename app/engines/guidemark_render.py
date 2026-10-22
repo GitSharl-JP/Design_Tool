@@ -187,12 +187,15 @@ def _hex_rgba(col: str) -> tuple:
 
 
 def text_ops(design: Design, text: str, tw: int, th: int, dpi: int,
-             font_path) -> list:
-    """Draw ops for a plain single-run label."""
+             font_path, pt_override=None) -> list:
+    """Draw ops for a single-run label (`pt_override` replaces the
+    design's size, auto-fit included)."""
     is3 = len(text) >= 3
     fp = font_path(design.font_family, design.font_style)
 
-    if design.auto_size:
+    if pt_override is not None:
+        num_pt = pt_override
+    elif design.auto_size:
         num_pt = auto_num_size(text, tw, th, fp, dpi, design.fsize3_pt)
     else:
         num_pt = design.fsize3_pt if is3 else design.fsize_pt
@@ -288,9 +291,14 @@ def composite_ops(item: SheetItem, tw: int, th: int, dpi: int,
         cx, cy = int(tw * design.pos_x / 100), int(th * design.pos_y / 100)
         base_trk = design.tracking
 
+    cx += round(item.dx_mm / 25.4 * dpi)
+    cy -= round(item.dy_mm / 25.4 * dpi)
+
     runs = []   # (char, font, x_offset, rgba, dy_px)
     x = 0.0
+    main_w = 0.0
     for i, seg in enumerate(segs):
+        x += round(seg.gap_mm / 25.4 * dpi) if i else 0
         font = _load_font(fp_of(seg), pt2px(
             seg.pt if seg.pt is not None else main_pt, dpi))
         trk = scale_tracking(
@@ -304,20 +312,23 @@ def composite_ops(item: SheetItem, tw: int, th: int, dpi: int,
         # last char of the last run: drop the trailing tracking
         if i == len(segs) - 1 and seg.text:
             x -= trk
+        if i == 0:
+            main_w = x - (trk if seg.text and len(segs) > 1 else 0)
     if not runs:
         return []
     total_w = x
 
     bb = _SCRATCH.textbbox((0, 0), main.text, font=runs[0][1], anchor="ls")
     baseline = cy - (bb[1] + bb[3]) / 2
-    left = cx - total_w / 2
+    left = cx - (main_w if item.center_main else total_w) / 2
     return [Op(ch, round(left + ox), round(baseline - dy), "ls", font, rgba)
             for ch, font, ox, rgba, dy in runs]
 
 
 def item_ops(item: SheetItem, tw: int, th: int, dpi: int, font_path) -> list:
     if item.is_simple:
-        return text_ops(item.design, item.text, tw, th, dpi, font_path)
+        return text_ops(item.design, item.text, tw, th, dpi, font_path,
+                        pt_override=item.segments[0].pt)
     return composite_ops(item, tw, th, dpi, font_path)
 
 
