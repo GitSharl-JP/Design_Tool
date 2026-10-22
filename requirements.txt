@@ -1,0 +1,4 @@
+Pillow>=10.0
+fonttools>=4.0
+pypdfium2>=4.30
+resvg-py>=0.2

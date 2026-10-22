@@ -4,6 +4,7 @@
 # =============================================================================
 
 import os, re, sys, threading, json, subprocess
+import logging
 import concurrent.futures as _futures
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
@@ -16,6 +17,7 @@ except ImportError:
     PILLOW_OK = False
 
 DESKTOP = Path(os.path.expanduser("~")) / "Desktop"
+log = logging.getLogger(__name__)
 
 # ── Windows drag-and-drop via WM_DROPFILES (no extra package needed) ─────────
 def _enable_drop(widget, callback):
@@ -87,658 +89,38 @@ def _enable_drop(widget, callback):
     except Exception:
         pass
 
-# ── Colours & fonts ──────────────────────────────────────────────────────────
-BG           = "#111111"   # neutral black
-BG2          = "#1c1c1c"   # card / panel
-BG3          = "#262626"   # input / sink
-ACCENT       = "#f77f00"   # Acoustiguide orange
-ACCENT2      = "#d96e00"   # pressed
-ACCENT_LIGHT = "#ff9933"   # hover
-FG           = "#f2f2f2"
-FG2          = "#888888"
-FG_GREEN     = "#6fcf97"
-FG_RED       = "#eb5757"
-FG_YELLOW    = "#f2c94c"
-RADIUS       = 8
+# -- Theme, i18n, fonts -- migrated to app/theme.py and app/i18n.py --
+from app.theme import (
+    BG, BG2, BG3, BG4, BORDER, ACCENT, ACCENT2, ACCENT_LIGHT, ACCENT_SOFT,
+    FG, FG2, FG3, FG_ON_ACCENT, FG_GREEN, FG_RED, FG_YELLOW, RADIUS, PREVIEW_BG,
+    FONT_H1, FONT_H2, FONT_LABEL, FONT_BODY, FONT_SM, FONT_HINT, FONT_MONO,
+    _ui_font, _update_font_constants,
+)
+from app.i18n import _STRINGS, _t
 
-# ── Internationalisation ──────────────────────────────────────────────────────
-_LANG = "en"   # "en" or "ja"
-
-_STRINGS: dict = {
-    "en": {
-        # ImageGenWizard
-        "igw.title":      "Image Tool  —  Image Creator",
-        "igw.hdr":        "🎨  Image Creator",
-        "igw.steps":      ["1 · Canvas", "2 · Background", "3 · Numbers",
-                           "4 · Corners", "5 · Output", "6 · Generate"],
-        "igw.back":       "← Back",
-        "igw.next":       "Next →",
-        "igw.restart":    "↩  Start over",
-        "igw.prev_title": "Live Preview",
-        "igw.prev_ph":    "Preview…",
-        "igw.refresh":    "🔄  Refresh",
-        # Step 0 — Canvas
-        "s0.title":       "Canvas size",
-        "s0.width":       "Width :",
-        "s0.height_px":   "px     Height :",
-        "s0.link_wh":     "🔗  Link W = H  (auto square)",
-        "s0.presets":     "Preset sizes :",
-        "s0.proj":        "Projects :",
-        "s0.std":         "Standard :",
-        "s0.analyze":     "🔍  Analyse reference image…",
-        "s0.analyze_hint": "Extract position, colour and font size from an existing numbered image.",
-        "anal.title":     "Extracted settings",
-        "anal.dlg":       "Select reference image",
-        "anal.none":      "Could not detect any text in this image. Try with a cleaner image.",
-        # Step 1 — Background
-        "s1.title":       "Image background",
-        "s1.color":       "Solid colour",
-        "s1.hex":         "Hex code :",
-        "s1.quick":       "Quick :",
-        "s1.image":       "Background image  (JPG / PNG)",
-        "s1.browse":      "📂  Browse…",
-        "s1.no_file":     "  (no file selected)",
-        "s1.hint":        "The image will be resized to fit the canvas exactly.",
-        "s1.bg_dlg":      "Select background image",
-        "s1.pattern":     "Image pattern  (multiple images, cycling)",
-        "s1.pat_add":     "📂  Add image…",
-        "s1.pat_hint":    "Images cycle in order  ·  #1→img1, #2→img2, #3→img1…",
-        "s1.pat_empty":   "(drag & drop images here, or click Add)",
-        # Step 2 — Numbers
-        "s2.style_title": "Number style",
-        "s2.nums_title":  "Numbers to generate",
-        "s2.nums_hint":   "Examples:  1-30   |   1-30, 55, 60, 100, 200   |   5, 10, 15, 20",
-        "s2.count":       "→ {n} image(s)",
-        "s2.count_range": "  (#{a}…#{b})",
-        "s2.font_title":  "Font",
-        "s2.family":      "Family :",
-        "s2.style":       "Style    :",
-        "s2.size":        "  Size :",
-        "s2.tracking":    "  Tracking :",
-        "s2.tracking_hint": "Letter spacing  (0 = default, negative = tighter, positive = looser)",
-        "s2.px":          "px",
-        "s2.preview_btn": "🔍  Preview fonts",
-        "s2.mode_lbl":    "Size mode :",
-        "s2.fixed":       "Fixed",
-        "s2.auto":        "Auto-adapt  (3+ digits)",
-        "s2.auto_hint":   "➔ Auto: font shrinks if the number exceeds canvas bounds (100, 200…)",
-        "s2.tip":         "Tip: type in Family to filter  ·  or click \u201cPreview fonts\u201d to browse designs.",
-        "s2.color_title": "Text colour",
-        "s2.hex_lbl":     "Hex :",
-        "s2.quick_lbl":   "Quick :",
-        "s2.shadow_title":"Drop shadow",
-        "s2.shadow_on":   "Enable shadow",
-        "s2.shadow_col":  "Colour :",
-        "s2.shadow_x":    "Offset X :",
-        "s2.shadow_y":    "px   Y :",
-        "s2.shadow_blur": "Blur :",
-        "s2.pos_title":   "Number position",
-        "s2.pos_manual":  "Manual position  (disable auto-centre)",
-        "s2.pos_hint":    "Top-left anchor of the text (0,0 = top-left of canvas) :",
-        "s2.pos_x":       "X :",
-        "s2.pos_xy":      "px   Y :",
-        "s2.pos_px":      "px",
-        # Step 3 — Corners
-        "s3.title":       "Corner shape",
-        "s3.sharp":       "Sharp corners  (clean rectangle)",
-        "s3.rounded":     "Rounded corners",
-        "s3.radius":      "Radius :",
-        "s3.warn_jpeg":   "⚠  JPEG with rounded corners: transparent areas will be filled with white.",
-        "s3.hint_png":    "    PNG format: full transparency — ideal for rounded corners.",
-        # Step 4 — Output
-        "s4.title":       "Output format",
-        "s4.quality":     "Quality :",
-        "s4.naming":      "File naming",
-        "s4.prefix":      "Prefix :",
-        "s4.folder":      "Output folder",
-        "s4.choose":      "📂  Choose…",
-        "s4.dlg_title":   "Output folder",
-        # Step 5 — Generate
-        "s5.summary":     "Summary",
-        "s5.generate":    "▶  Generate images",
-        "s5.refresh":     "🔄  Refresh preview",
-        "s5.sum_canvas":  "Canvas   : {w} × {h} px",
-        "s5.sum_nums":    "Numbers  : {nums}  ({n} image(s))",
-        "s5.sum_font":    "Font     : {fam} {sty}  {sz} px{auto}",
-        "s5.sum_bg":      "Bg       : {bg}",
-        "s5.sum_corners": "Corners  : {c}",
-        "s5.sum_fmt":     "Format   : {fmt}    Prefix : {pfx}    Suffix : {sfx}",
-        "s5.sum_out":     "Output   : {out}",
-        "s5.auto_tag":    "  (auto size)",
-        "s5.sharp":       "Sharp",
-        "s5.rounded_r":   "Rounded r={r}px",
-        # Errors / messages
-        "err.empty_list": "Empty list",
-        "err.empty_msg":  "Please enter at least one number or range.",
-        "err.bad_value":  "Invalid value",
-        "err.no_bg":      "Missing background image",
-        "err.no_bg_msg":  "Please select a background image.",
-        "err.no_pat":     "No pattern images",
-        "err.no_pat_msg": "Add at least one image to the pattern.",
-        "err.done":       "Done ✔",
-        "err.done_msg":   "{ok} image(s) generated in:\n{out}",
-        "err.log_sum":    "── {ok}/{total} images generated → {out}",
-        # FontPreviewDialog
-        "fpd.title":      "Choose a font",
-        "fpd.search":     "🔍  Search :",
-        "fpd.count":      "{n} font(s)",
-        "fpd.cancel":     "✕  Cancel",
-        # HomeScreen
-        "home.sub":       "Professional image workflow suite  ·  v2.0",
-        "home.pills":     ["8 tools", "Batch", "Live preview", "100% local"],
-        "home.tools":     "TOOLS",
-        "home.adv":       "ADVANCED",
-        "home.pipeline":  "▶  Pipeline",
-        "home.pipe_desc": "  Chain multiple tools  (Resize → Compress → Rename)",
-        "home.rename_d":  "Rename files — digits, counters, custom name maps",
-        "home.resize_d":  "Resize images — width, height, box fit, percentage",
-        "home.comp_d":    "Reduce file size — fixed quality or target KB",
-        "home.gen_d":     "Create numbered images — background, font, rounded corners",
-        "home.clip_d":    "Favourite snippets — copy in one click, by category",
-        "home.lang_btn":  "🇯🇵 日本語",
-        # ColorPickerDialog
-        "cpd.title":      "Choose a colour",
-        "cpd.cancel":     "Cancel",
-        # New features
-        "s4.suffix":      "Suffix :",
-        "s5.open_folder": "📂  Open folder",
-        "s5.grid_title":  "Sample grid",
-        "s1.paste_path":  "📋  Paste path",
-        "s2.guide_title": "Guide mark",
-        "s2.guide_on":    "Show guide  (safe zone)",
-        "s2.guide_margin":"Margin :",
-        "s2.guide_opus":  "OPUS 40px",
-        "s2.guide_hint":  "→ When active, number stays within the guide zone (also constrains manual position).",
-        # Presets
-        "preset.title":   "Presets",
-        "preset.save":    "💾  Save preset",
-        "preset.load":    "📂  Load preset",
-        "preset.delete":  "🗑  Delete",
-        "preset.name_dlg":"Preset name :",
-        "preset.saved":   "Preset saved : {name}",
-        "preset.loaded":  "Preset loaded : {name}",
-        "preset.none":    "(no presets yet)",
-        "preset.confirm_del": "Delete preset '{name}'?",
-        # Undo generation
-        "undo.btn":       "↩  Undo last generation",
-        "undo.confirm":   "Delete {n} generated file(s)?",
-        "undo.done":      "{n} file(s) deleted.",
-        "undo.empty":     "Nothing to undo.",
-        # Batch convert
-        "conv.title":     "Batch Convert",
-        "conv.desc":      "Convert images between formats — JPG, PNG, WebP, BMP",
-        "conv.src_fmt":   "Source format :",
-        "conv.dst_fmt":   "Target format :",
-        "conv.quality":   "JPEG quality :",
-        "conv.go":        "▶  Convert",
-        "conv.done":      "{ok}/{total} file(s) converted.",
-        "conv.overwrite": "Overwrite originals",
-        "conv.out_sub":   "Save in sub-folder : converted/",
-        # GuideMarkWizard
-        "gmw.title":      "Guide Mark Generator",
-        "gmw.desc":       "Arrange numbered images for print — A3ノビ, A3, A4",
-        "gmw.nums":       "Number range :",
-        "gmw.folder":     "Source folder :",
-        "gmw.prefix":     "Prefix :",
-        "gmw.suffix":     "Suffix :",
-        "gmw.ext":        "Extension :",
-        "gmw.paper":      "Paper size :",
-        "gmw.orient":     "Orientation :",
-        "gmw.portrait":   "Portrait",
-        "gmw.landscape":  "Landscape",
-        "gmw.tile_w":     "Tile width (mm) :",
-        "gmw.tile_h":     "Tile height (mm) :",
-        "gmw.margin":     "Page margin (mm) :",
-        "gmw.gap":        "Spacing (mm) :",
-        "gmw.dpi":        "Resolution (DPI) :",
-        "gmw.out_folder": "Output folder :",
-        "gmw.printers":   "Printer :",
-        "gmw.preview":    "Layout preview",
-        "gmw.export_png": "💾  Export PNG",
-        "gmw.export_pdf": "📄  Export PDF  (.ai compatible)",
-        "gmw.print":      "🖨  Print…",
-        "gmw.layout_sum": "{placed}/{total} tiles placed  ·  grid {cols}×{rows}",
-        "gmw.no_src":     "Please select a source folder first.",
-        "gmw.done_png":   "PNG exported : {path}",
-        "gmw.done_pdf":   "PDF exported : {path}",
-        "gmw.src_mode":     "Source :",
-        "gmw.src_folder":   "📁  From folder",
-        "gmw.src_render":   "🎨  Generate tiles",
-        "gmw.design":       "Design :",
-        "gmw.des_num":      "Number only",
-        "gmw.des_num_text": "Number + sub-text",
-        "gmw.tile_bg":      "Tile background :",
-        "gmw.overlay":      "Overlay image :",
-        "gmw.num_font":     "Number font :",
-        "gmw.num_fsize":    "Number size (pt) :",
-        "gmw.num_auto":     "Auto-scale to tile",
-        "gmw.num_color":    "Number colour :",
-        "gmw.sub_font":     "Sub-text font :",
-        "gmw.sub_fsize":    "Sub-text size (pt) :",
-        "gmw.sub_tracking": "Tracking (px) :",
-        "gmw.sub_color":    "Sub-text colour :",
-        "gmw.design_preset":  "Design :",
-        "gmw.show_subtext":   "Show sub-text",
-        "gmw.monochrome":     "Monochrome (K only)",
-        "gmw.tile_size":      "Tile size :",
-        "gmw.sub_text":       "Sub-text :",
-        "gmw.step_design":    "Design",
-        "gmw.step_configure": "Configure",
-        "gmw.step_print":     "Print",
-        "gmw.pick_design":    "Choose a design",
-        "gmw.back":           "Back",
-        "gmw.next":           "Next",
-        "gmw.num_range":      "Numbers",
-        "gmw.advanced":       "Advanced",
-        "gmw.tile_preview_num": "Preview n\u00b0 :",
-        "home.gmw_d":     "Arrange numbered images for print — auto-layout, PDF/PNG export",
-        # PDFExtractorWizard
-        "pdf.title":      "PDF — Text Extractor",
-        "pdf.files":      "━  PDF Files",
-        "pdf.add":        "➕  Add PDF files…",
-        "pdf.remove":     "✕ Remove",
-        "pdf.options":    "━  Options",
-        "pdf.format":     "Format :",
-        "pdf.cols":       "Auto column detection",
-        "pdf.pages":      "Pages :",
-        "pdf.pages_hint": "e.g. 1-5, 8",
-        "pdf.outdir":     "Output folder :",
-        "pdf.extract":    "▶  Extract",
-        "pdf.export":     "💾  Export",
-        "pdf.preview":    "Preview — page :",
-        "pdf.installing": "Installing pdfplumber…",
-        "pdf.extracting": "Extracting…",
-        "pdf.done":       "✓  {n} file(s) — {p} page(s) extracted.",
-        "pdf.words":      "{w} words  ·  {c} chars",
-        "home.pdf_d":     "Extract text from PDF — layout-aware, export TXT / Word",
-        # LinkRedirectorWizard
-        "lrw.title":      "Link Redirector",
-        "lrw.desc":       "Short expiring links for PWA demos — Cloudflare Worker",
-        "lrw.tab_create": "Create",
-        "lrw.tab_links":  "My Links",
-        "lrw.tab_deploy": "Deploy",
-        "lrw.url":        "Destination URL *",
-        "lrw.url_hint":   "https://my-pwa.vercel.app",
-        "lrw.expires":    "Expiry date / time",
-        "lrw.max_clicks": "Max clicks",
-        "lrw.max_clicks_hint": "leave blank = unlimited",
-        "lrw.custom":     "Custom code (optional)",
-        "lrw.custom_hint":"e.g. my-project-v2",
-        "lrw.worker_url": "Worker base URL *",
-        "lrw.worker_hint":"https://links.my-domain.workers.dev",
-        "lrw.token":      "Admin token",
-        "lrw.token_hint": "secret configured in Cloudflare",
-        "lrw.generate":   "▶  Generate link",
-        "lrw.open_admin": "🌐  Open admin panel",
-        "lrw.copy":       "Copy",
-        "lrw.copied":     "Copied!",
-        "lrw.refresh":    "↺  Refresh",
-        "lrw.delete":     "✕  Delete",
-        "lrw.no_links":   "No links yet.",
-        "lrw.deploy_title": "How to deploy",
-        "lrw.save_worker":  "💾  Save worker.js",
-        "home.lrw_d":     "Generate & manage expiring short links (Cloudflare Worker)",
-    },
-    "ja": {
-        # ImageGenWizard
-        "igw.title":      "Image Tool  —  画像クリエーター",
-        "igw.hdr":        "🎨  画像クリエーター",
-        "igw.steps":      ["1 · キャンバス", "2 · 背景", "3 · 番号",
-                           "4 · 角", "5 · 出力", "6 · 生成"],
-        "igw.back":       "← 戻る",
-        "igw.next":       "次へ →",
-        "igw.restart":    "↩  最初から",
-        "igw.prev_title": "ライブプレビュー",
-        "igw.prev_ph":    "プレビュー…",
-        "igw.refresh":    "🔄  更新",
-        # Step 0 — Canvas
-        "s0.title":       "キャンバスサイズ",
-        "s0.width":       "幅 :",
-        "s0.height_px":   "px     高さ :",
-        "s0.link_wh":     "🔗  W = H リンク（自動正方形）",
-        "s0.presets":     "プリセット :",
-        "s0.proj":        "プロジェクト :",
-        "s0.std":         "標準 :",
-        "s0.analyze":     "🔍  参考画像を解析…",
-        "s0.analyze_hint": "既存の番号画像から位置・色・フォントサイズを抜き出します。",
-        "anal.title":     "設定を抽出しました",
-        "anal.dlg":       "参考画像を選択",
-        "anal.none":      "画像からテキストを検出できませんでした。",
-        # Step 1 — Background
-        "s1.title":       "画像の背景",
-        "s1.color":       "単色",
-        "s1.hex":         "Hex コード :",
-        "s1.quick":       "クイック :",
-        "s1.image":       "背景画像  (JPG / PNG)",
-        "s1.browse":      "📂  参照…",
-        "s1.no_file":     "  （ファイル未選択）",
-        "s1.hint":        "画像はキャンバスサイズに合わせてリサイズされます。",
-        "s1.bg_dlg":      "背景画像を選択",
-        "s1.pattern":     "画像パターン（複数画像のサイクル）",
-        "s1.pat_add":     "📂  画像を追加…",
-        "s1.pat_hint":    "順番にサイクル  ·  #1→img1, #2→img2, #3→img1…",
-        "s1.pat_empty":   "（ここに画像をドラッグするか追加してください）",
-        # Step 2 — Numbers
-        "s2.style_title": "番号スタイル",
-        "s2.nums_title":  "生成する番号",
-        "s2.nums_hint":   "例：  1-30   |   1-30, 55, 60, 100, 200   |   5, 10, 15, 20",
-        "s2.count":       "→ {n} 枚",
-        "s2.count_range": "  (#{a}…#{b})",
-        "s2.font_title":  "フォント",
-        "s2.family":      "ファミリー :",
-        "s2.style":       "スタイル  :",
-        "s2.size":        "  サイズ :",
-        "s2.tracking":    "  トラッキング :",
-        "s2.tracking_hint": "文字間距（0=デフォルト，負=素·正=適）",
-        "s2.px":          "px",
-        "s2.preview_btn": "🔍  フォントプレビュー",
-        "s2.mode_lbl":    "サイズモード :",
-        "s2.fixed":       "固定",
-        "s2.auto":        "自動調整  (3桁以上)",
-        "s2.auto_hint":   "➔ 自動：番号がはみ出す場合にフォントサイズを縮小 (100, 200…)",
-        "s2.tip":         "ヒント：ファミリー欄に入力してフィルタ  ·  または\u300cフォントプレビュー\u300dでデザイン確認。",
-        "s2.color_title": "文字色",
-        "s2.hex_lbl":     "Hex :",
-        "s2.quick_lbl":   "クイック :",
-        "s2.shadow_title":"ドロップシャドウ",
-        "s2.shadow_on":   "シャドウを有効にする",
-        "s2.shadow_col":  "色 :",
-        "s2.shadow_x":    "X オフセット :",
-        "s2.shadow_y":    "px   Y :",
-        "s2.shadow_blur": "ぼかし :",
-        "s2.pos_title":   "番号の位置",
-        "s2.pos_manual":  "手動位置  （自動センタリングを無効化）",
-        "s2.pos_hint":    "テキストの左上アンカー（0,0 = キャンバス左上）:",
-        "s2.pos_x":       "X :",
-        "s2.pos_xy":      "px   Y :",
-        "s2.pos_px":      "px",
-        # Step 3 — Corners
-        "s3.title":       "角のスタイル",
-        "s3.sharp":       "直角  （クリアな長方形）",
-        "s3.rounded":     "角丸",
-        "s3.radius":      "半径 :",
-        "s3.warn_jpeg":   "⚠  角丸 + JPEG：透明部分は白で塗りつぶされます。",
-        "s3.hint_png":    "    PNG 形式：完全透明 — 角丸に最適。",
-        # Step 4 — Output
-        "s4.title":       "出力フォーマット",
-        "s4.quality":     "品質 :",
-        "s4.naming":      "ファイル名設定",
-        "s4.prefix":      "プレフィックス :",
-        "s4.folder":      "出力フォルダ",
-        "s4.choose":      "📂  選択…",
-        "s4.dlg_title":   "出力フォルダ",
-        # Step 5 — Generate
-        "s5.summary":     "サマリー",
-        "s5.generate":    "▶  画像を生成",
-        "s5.refresh":     "🔄  プレビュー更新",
-        "s5.sum_canvas":  "キャンバス : {w} × {h} px",
-        "s5.sum_nums":    "番号      : {nums}  ({n} 枚)",
-        "s5.sum_font":    "フォント  : {fam} {sty}  {sz} px{auto}",
-        "s5.sum_bg":      "背景      : {bg}",
-        "s5.sum_corners": "角        : {c}",
-        "s5.sum_fmt":     "形式      : {fmt}    プレフィックス : {pfx}    サフィックス : {sfx}",
-        "s5.sum_out":     "出力先    : {out}",
-        "s5.auto_tag":    "  (自動サイズ)",
-        "s5.sharp":       "直角",
-        "s5.rounded_r":   "角丸 r={r}px",
-        # Errors / messages
-        "err.empty_list": "リストが空です",
-        "err.empty_msg":  "番号または範囲を1つ以上入力してください。",
-        "err.bad_value":  "無効な値",
-        "err.no_bg":      "背景画像がありません",
-        "err.no_bg_msg":  "背景画像を選択してください。",
-        "err.no_pat":     "パターン画像がありません",
-        "err.no_pat_msg": "パターンに画像を少なくとも1枚追加してください。",
-        "err.done":       "完了 ✔",
-        "err.done_msg":   "{ok} 枚の画像を生成しました：\n{out}",
-        "err.log_sum":    "── {ok}/{total} 枚生成完了 → {out}",
-        # FontPreviewDialog
-        "fpd.title":      "フォントを選択",
-        "fpd.search":     "🔍  検索 :",
-        "fpd.count":      "{n} フォント",
-        "fpd.cancel":     "✕  キャンセル",
-        # HomeScreen
-        "home.sub":       "プロ向け画像ワークフロースイート  ·  v2.0",
-        "home.pills":     ["8 ツール", "バッチ", "ライブプレビュー", "100% ローカル"],
-        "home.tools":     "ツール",
-        "home.adv":       "上級",
-        "home.pipeline":  "▶  パイプライン",
-        "home.pipe_desc": "  ツールを連結  (Resize → Compress → Rename)",
-        "home.rename_d":  "ファイルのリネーム — 番号・カウンター・カスタム名",
-        "home.resize_d":  "画像リサイズ — 幅・高さ・ボックスフィット・%",
-        "home.comp_d":    "ファイルサイズ削減 — 品質固定または KB 目標",
-        "home.gen_d":     "番号付き画像作成 — 背景・フォント・角丸",
-        "home.clip_d":    "スニペット管理 — ワンクリックコピー・カテゴリ別",
-        "home.lang_btn":  "🇬🇧 English",
-        # ColorPickerDialog
-        "cpd.title":      "色を選択",
-        "cpd.cancel":     "キャンセル",
-        # New features
-        "s4.suffix":      "サフィックス :",
-        "s5.open_folder": "📂  フォルダを開く",
-        "s5.grid_title":  "サンプルグリッド",
-        "s1.paste_path":  "📋  パスを貼り付け",
-        "s2.guide_title": "ガイドマーク",
-        "s2.guide_on":    "ガイドを表示  (セーフゾーン)",
-        "s2.guide_margin":"マージン :",
-        "s2.guide_opus":  "OPUS 40px",
-        "s2.guide_hint":  "→ 有効時、番号はガイドゾーン内に制限されます（手動位置も制限）。",
-        # Presets
-        "preset.title":   "プリセット",
-        "preset.save":    "💾  プリセット保存",
-        "preset.load":    "📂  プリセット読込",
-        "preset.delete":  "🗑  削除",
-        "preset.name_dlg":"プリセット名 :",
-        "preset.saved":   "保存しました : {name}",
-        "preset.loaded":  "読み込みました : {name}",
-        "preset.none":    "（プリセットなし）",
-        "preset.confirm_del": "プリセット '{name}' を削除しますか？",
-        # Undo generation
-        "undo.btn":       "↩  生成を取り消す",
-        "undo.confirm":   "{n} ファイルを削除しますか？",
-        "undo.done":      "{n} ファイルを削除しました。",
-        "undo.empty":     "取り消すものがありません。",
-        # Batch convert
-        "conv.title":     "一括変換",
-        "conv.desc":      "画像フォーマットを変換 — JPG, PNG, WebP, BMP",
-        "conv.src_fmt":   "変換元 :",
-        "conv.dst_fmt":   "変換先 :",
-        "conv.quality":   "JPEG品質 :",
-        "conv.go":        "▶  変換",
-        "conv.done":      "{ok}/{total} ファイル変換完了。",
-        "conv.overwrite": "元ファイルを上書き",
-        "conv.out_sub":   "サブフォルダに保存 : converted/",
-        # GuideMarkWizard
-        "gmw.title":      "ガイドマーク生成",
-        "gmw.desc":       "番号画像を印刷用に自動配置 — A3ノビ, A3, A4",
-        "gmw.nums":       "番号範囲 :",
-        "gmw.folder":     "ソースフォルダ :",
-        "gmw.prefix":     "プレフィックス :",
-        "gmw.suffix":     "サフィックス :",
-        "gmw.ext":        "拡張子 :",
-        "gmw.paper":      "用紙サイズ :",
-        "gmw.orient":     "向き :",
-        "gmw.portrait":   "縦",
-        "gmw.landscape":  "横",
-        "gmw.tile_w":     "タイル幅 (mm) :",
-        "gmw.tile_h":     "タイル高さ (mm) :",
-        "gmw.margin":     "ページ余白 (mm) :",
-        "gmw.gap":        "間隔 (mm) :",
-        "gmw.dpi":        "解像度 (DPI) :",
-        "gmw.out_folder": "出力フォルダ :",
-        "gmw.printers":   "プリンター :",
-        "gmw.preview":    "レイアウトプレビュー",
-        "gmw.export_png": "💾  PNG エクスポート",
-        "gmw.export_pdf": "📄  PDF エクスポート  (.ai 互換)",
-        "gmw.print":      "🖨  印刷…",
-        "gmw.layout_sum": "{placed}/{total} タイル配置  ·  グリッド {cols}×{rows}",
-        "gmw.no_src":     "先にソースフォルダを選択してください。",
-        "gmw.done_png":   "PNG エクスポート完了 : {path}",
-        "gmw.done_pdf":   "PDF エクスポート完了 : {path}",
-        "gmw.src_mode":     "ソース :",
-        "gmw.src_folder":   "📁  フォルダから",
-        "gmw.src_render":   "🎨  タイルを生成",
-        "gmw.design":       "デザイン :",
-        "gmw.des_num":      "数字のみ",
-        "gmw.des_num_text": "数字 + テキスト",
-        "gmw.tile_bg":      "タイル背景 :",
-        "gmw.overlay":      "オーバーレイ画像 :",
-        "gmw.num_font":     "数字フォント :",
-        "gmw.num_fsize":    "数字サイズ (pt) :",
-        "gmw.num_auto":     "タイルに合わせて自動調整",
-        "gmw.num_color":    "数字の色 :",
-        "gmw.sub_font":     "サブテキストフォント :",
-        "gmw.sub_fsize":    "サブテキストサイズ (pt) :",
-        "gmw.sub_tracking": "トラッキング (px) :",
-        "gmw.sub_color":    "サブテキストの色 :",
-        "gmw.design_preset":  "デザイン :",
-        "gmw.show_subtext":   "サブテキストを表示",
-        "gmw.monochrome":     "モノクロ (K のみ)",
-        "gmw.tile_size":      "タイルサイズ :",
-        "gmw.sub_text":       "サブテキスト :",
-        "gmw.step_design":    "デザイン",
-        "gmw.step_configure": "設定",
-        "gmw.step_print":     "印刷",
-        "gmw.pick_design":    "デザインを選択してください",
-        "gmw.back":           "戻る",
-        "gmw.next":           "次へ",
-        "gmw.num_range":      "番号",
-        "gmw.advanced":       "詳細設定",
-        "gmw.tile_preview_num": "プレビュー番号 :",
-        "home.gmw_d":     "番号画像を印刷用に自動配置 — PDF/PNG エクスポート",
-        # PDFExtractorWizard
-        "pdf.title":      "PDF — テキスト抽出",
-        "pdf.files":      "━  PDFファイル",
-        "pdf.add":        "➕  PDFを追加…",
-        "pdf.remove":     "✕ 削除",
-        "pdf.options":    "━  オプション",
-        "pdf.format":     "形式 :",
-        "pdf.cols":       "段組み自動検出",
-        "pdf.pages":      "ページ :",
-        "pdf.pages_hint": "例: 1-5, 8",
-        "pdf.outdir":     "出力フォルダ :",
-        "pdf.extract":    "▶  抽出",
-        "pdf.export":     "💾  エクスポート",
-        "pdf.preview":    "プレビュー — ページ :",
-        "pdf.installing": "pdfplumber をインストール中…",
-        "pdf.extracting": "抽出中…",
-        "pdf.done":       "✓  {n} ファイル — {p} ページ抽出完了",
-        "pdf.words":      "{w} 語  ·  {c} 文字",
-        "home.pdf_d":     "PDFからテキスト抽出 — レイアウト対応、TXT/Word エクスポート",
-        # LinkRedirectorWizard
-        "lrw.title":      "リンクリダイレクター",
-        "lrw.desc":       "PWAデモ用の期限付き短縮リンク — Cloudflare Worker",
-        "lrw.tab_create": "作成",
-        "lrw.tab_links":  "リンク一覧",
-        "lrw.tab_deploy": "デプロイ",
-        "lrw.url":        "転送先URL *",
-        "lrw.url_hint":   "https://my-pwa.vercel.app",
-        "lrw.expires":    "有効期限",
-        "lrw.max_clicks": "最大クリック数",
-        "lrw.max_clicks_hint": "空欄＝無制限",
-        "lrw.custom":     "カスタムコード（任意）",
-        "lrw.custom_hint":"例: my-project-v2",
-        "lrw.worker_url": "Worker ベースURL *",
-        "lrw.worker_hint":"https://links.my-domain.workers.dev",
-        "lrw.token":      "管理トークン",
-        "lrw.token_hint": "Cloudflareで設定したシークレット",
-        "lrw.generate":   "▶  リンクを生成",
-        "lrw.open_admin": "🌐  管理画面を開く",
-        "lrw.copy":       "コピー",
-        "lrw.copied":     "コピー済み！",
-        "lrw.refresh":    "↺  更新",
-        "lrw.delete":     "✕  削除",
-        "lrw.no_links":   "リンクなし",
-        "lrw.deploy_title": "デプロイ方法",
-        "lrw.save_worker":  "💾  worker.js を保存",
-        "home.lrw_d":     "期限付き短縮リンクの生成・管理（Cloudflare Worker）",
-    },
-}
-
-
-def _t(key: str, **kw) -> str:
-    """Return translated string for the current language (_LANG)."""
-    en  = _STRINGS["en"]
-    lo  = _STRINGS.get(_LANG, en)
-    val = lo.get(key, en.get(key, key))
-    if kw and isinstance(val, str):
-        try:
-            return val.format(**kw)
-        except (KeyError, IndexError):
-            return val
-    return val
-
-
-_FONT_FACE_EN = "Segoe UI"
-_FONT_FACE_JA = "Noto Sans Mono JP"
-
-def _ui_font():
-    """Return the UI font face for the active language."""
-    return _FONT_FACE_JA if _LANG == "ja" else _FONT_FACE_EN
-
-def _update_font_constants():
-    """Rebuild FONT_* globals after a language change."""
-    global FONT_H1, FONT_H2, FONT_BODY, FONT_SM, FONT_MONO
-    face = _ui_font()
-    FONT_H1   = (face, 18, "bold")
-    FONT_H2   = (face, 13, "bold")
-    FONT_BODY = (face, 10)
-    FONT_SM   = (face, 9)
-    FONT_MONO = ("Consolas", 9)   # keep monospace for code snippets
-
-_update_font_constants()  # initialise with default language
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def fmt_size(b):
     if b >= 1_048_576: return f"{b/1_048_576:.2f} MB"
     return f"{b/1024:.1f} KB"
 
-def collect_files(folder, exts, recurse):
-    folder = Path(folder)
-    files  = []
-    globs  = exts if exts else ["*.*"]
-    for g in globs:
-        if recurse:
-            files += sorted(folder.rglob(g))
-        else:
-            files += sorted(folder.glob(g))
-    seen = set(); unique = []
-    for f in files:
-        if f in seen or not f.is_file(): continue
-        seen.add(f); unique.append(f)
-    return sorted(unique, key=lambda p: str(p).lower())
-
-def first_digits(name):
-    m = re.search(r'\d+', name)
-    return m.group() if m else None
-
-# ── Rename engine ─────────────────────────────────────────────────────────────
-def compute_new_name(path: Path, cfg: dict, counter_ref: list) -> str:
-    base = path.stem
-    ext  = path.suffix
-
-    mode = cfg.get("num_mode", "1")
-    if mode == "2":
-        d = first_digits(base)
-        base = d if d else base
-    elif mode == "3":
-        w = cfg.get("pad_width", 3)
-        base = str(counter_ref[0]).zfill(w)
-        counter_ref[0] += 1
-    elif mode == "4":
-        d = first_digits(base)
-        if d:
-            idx = int(d) - cfg.get("map_start", 1)
-            nm  = cfg.get("name_map", [])
-            base = nm[idx] if 0 <= idx < len(nm) else base
-        # keep base as-is if no digit
-
-    find = cfg.get("find_text", "")
-    repl = cfg.get("replace_text", "")
-    if find:
-        base = base.replace(find, repl)
-
-    return cfg.get("prefix","") + base + cfg.get("suffix","") + ext
+# ── Rename engine -- migrated to app/engines/rename_engine.py ────────────────
+from app.engines.rename_engine import collect_files, first_digits, compute_new_name
+from app.engines.rename_flow import RenameJob
+from app.engines.guidemark_model import (
+    Design, Segment, SheetItem, TRACKING_REF_DPI)
+from app.engines.guidemark_render import (
+    scale_tracking as _scale_tracking, draw_tracked as _draw_tracked,
+    apply_k_convert, render_item)
+from app.engines.guidemark_layout import PAPER_MM, make_grid, render_pages
+from app.engines.guidemark_svg import SvgOptions, export_svg_pages
+from app.engines.vector_template import (
+    FILE_PATTERNS as _TPL_PATTERNS, load_thumbnail)
+from app.engines.font_jp import (
+    load_jp_support_cache as _load_jp_support_cache,
+    save_jp_support_cache as _save_jp_support_cache,
+    get_jp_support as _get_jp_support,
+)
 
 # ── Compress engine ───────────────────────────────────────────────────────────
 def compress_jpeg_pillow(src: Path, dst: Path, quality: int):
@@ -787,124 +169,89 @@ def compute_new_size(w, h, cfg):
         r = tw / w;  return int(tw), int(h * r)
     elif mode == "2":
         r = th / h;  return int(w * r), int(th)
-    elif mode == "3":
+    elif mode in ("3", "6"):
         r = min(tw/w, th/h); return int(w*r), int(h*r)
     elif mode == "4":
         return tw, th
     else:
         r = pct / 100.0; return int(w*r), int(h*r)
 
+
+def compute_canvas_fit(img: "Image.Image", cfg: dict):
+    """Mode 6: fit `img` inside (target_w, target_h) keeping aspect ratio,
+    then paste it centred onto a canvas of exactly that size filled with
+    `canvas_color` (default black) — the letterbox/pillarbox bars seen in
+    museum credit-panel exports. Optionally burns in a credit text line in
+    one of the bars. Returns the finished canvas image (RGB)."""
+    tw = int(cfg.get("target_w", 0))
+    th = int(cfg.get("target_h", 0))
+    nw, nh = compute_new_size(img.width, img.height, {**cfg, "resize_mode": "3"})
+    nw, nh = max(1, nw), max(1, nh)
+    fitted = img.convert("RGB").resize((nw, nh), Image.LANCZOS)
+
+    color = cfg.get("canvas_color", "#000000")
+    canvas = Image.new("RGB", (tw, th), _hex_to_rgb(color))
+    ox = (tw - nw) // 2
+    oy = (th - nh) // 2
+    canvas.paste(fitted, (ox, oy))
+
+    credit = (cfg.get("credit_text") or "").strip()
+    if credit:
+        from PIL import ImageDraw
+        draw = ImageDraw.Draw(canvas)
+        font_name = cfg.get("credit_font", "Arial")
+        font_size = int(cfg.get("credit_size", max(12, th // 40)))
+        font = _load_pil_font(font_name, font_size)
+        fg = _hex_to_rgb(cfg.get("credit_color", "#ffffff"))
+        margin = max(6, font_size // 2)
+        pos = cfg.get("credit_pos", "bottom-right")
+        bbox = draw.textbbox((0, 0), credit, font=font)
+        tw_px, th_px = bbox[2] - bbox[0], bbox[3] - bbox[1]
+        if "bottom" in pos:
+            y = th - margin - th_px
+        else:
+            y = margin
+        if "right" in pos:
+            x = tw - margin - tw_px
+        elif "center" in pos:
+            x = (tw - tw_px) // 2
+        else:
+            x = margin
+        draw.text((x - bbox[0], y - bbox[1]), credit, font=font, fill=fg)
+
+    return canvas
+
+
 def do_resize(src: Path, dst: Path, cfg: dict):
-    img  = Image.open(src)
-    nw, nh = compute_new_size(img.width, img.height, cfg)
-    img  = img.resize((nw, nh), Image.LANCZOS)
+    img = Image.open(src)
+    mode = cfg.get("resize_mode", "1")
+    if mode == "6":
+        result = compute_canvas_fit(img, cfg)
+    else:
+        nw, nh = compute_new_size(img.width, img.height, cfg)
+        result = img.resize((nw, nh), Image.LANCZOS)
     q    = cfg.get("jpeg_quality", 90)
     ext  = src.suffix.lower()
-    if ext in (".jpg",".jpeg"):
-        img.save(dst, "JPEG", quality=q, optimize=True)
+    if mode == "6":
+        dst = dst.with_suffix(".jpg")
+        result.save(dst, "JPEG", quality=q, optimize=True)
+    elif ext in (".jpg",".jpeg"):
+        result.save(dst, "JPEG", quality=q, optimize=True)
     else:
-        img.save(dst)
+        result.save(dst)
 
 # =============================================================================
-#  GUI helpers
+#  GUI helpers -- migrated to app/ui_kit.py
 # =============================================================================
-def styled_frame(parent, bg=None, **kw):
-    return tk.Frame(parent, bg=bg or BG, **kw)
-
-def label(parent, text, font=FONT_BODY, fg=FG, bg=None, **kw):
-    return tk.Label(parent, text=text, font=font, fg=fg, bg=bg or BG, **kw)
-
-def btn(parent, text, cmd, primary=True, **kw):
-    bg    = ACCENT if primary else BG3
-    hover = ACCENT2 if primary else "#333333"
-    b = tk.Button(parent, text=text, command=cmd,
-                  bg=bg, fg=FG, font=FONT_BODY,
-                  relief="flat", bd=0, padx=14, pady=7,
-                  activebackground=hover, activeforeground=FG,
-                  cursor="hand2", **kw)
-    b.bind("<Enter>", lambda e, _b=b, _h=hover: _b.config(bg=_h))
-    b.bind("<Leave>", lambda e, _b=b, _bg=bg:   _b.config(bg=_bg))
-    return b
-
-def entry(parent, textvariable=None, width=30, **kw):
-    return tk.Entry(parent, textvariable=textvariable, width=width,
-                    bg=BG3, fg=FG, insertbackground=FG,
-                    relief="flat", font=FONT_BODY, bd=4, **kw)
-
-def _blend_hex(c1, c2, t=0.18):
-    """Blend colour c2 into c1 by factor t (0=all c1, 1=all c2)."""
-    r1,g1,b1 = int(c1[1:3],16), int(c1[3:5],16), int(c1[5:7],16)
-    r2,g2,b2 = int(c2[1:3],16), int(c2[3:5],16), int(c2[5:7],16)
-    r = int(r1*(1-t)+r2*t)
-    g = int(g1*(1-t)+g2*t)
-    b = int(b1*(1-t)+b2*t)
-    return f"#{r:02x}{g:02x}{b:02x}"
-
-def _center_win(win):
-    """Centre a Toplevel (or Tk) on the screen."""
-    win.update_idletasks()
-    w = win.winfo_width()
-    h = win.winfo_height()
-    sw = win.winfo_screenwidth()
-    sh = win.winfo_screenheight()
-    x = max(0, (sw - w) // 2)
-    y = max(0, (sh - h) // 2)
-    win.geometry(f"+{x}+{y}")
-
-def _arrow_scale(sc: "tk.Scale"):
-    """Allow arrow-key control on any Scale: click it, then ←/→/↑/↓ steps ±1."""
-    sc.configure(takefocus=True)
-    def _step(n):
-        lo = float(sc.cget("from"))
-        hi = float(sc.cget("to"))
-        sc.set(max(lo, min(hi, sc.get() + n)))
-        return "break"
-    sc.bind("<Left>",  lambda e: _step(-1))
-    sc.bind("<Right>", lambda e: _step(+1))
-    sc.bind("<Up>",    lambda e: _step(+1))
-    sc.bind("<Down>",  lambda e: _step(-1))
-
-def separator(parent):
-    return tk.Frame(parent, bg=BG3, height=1)
-
-
-def _enable_mousewheel_scroll(canvas: tk.Canvas):
-    """Make mouse-wheel scroll 'canvas' regardless of which child widget the
-    pointer is over.  Call once after the canvas + its children exist."""
-    def _scroll(event):
-        # Linux sends Button-4/5, Windows sends <MouseWheel> with delta
-        delta = -1 if event.num == 5 else (1 if event.num == 4
-                else -1 * (event.delta // 120))
-        canvas.yview_scroll(delta, "units")
-
-    def _bind_tree(widget):
-        widget.bind("<MouseWheel>",  _scroll, add="+")
-        widget.bind("<Button-4>",    _scroll, add="+")
-        widget.bind("<Button-5>",    _scroll, add="+")
-        for child in widget.winfo_children():
-            _bind_tree(child)
-
-    _bind_tree(canvas)
-    # Also watch for new children added later (e.g. FontPreview rows)
-    canvas._mw_bind_tree = _bind_tree   # expose so callers can re-run after rebuild
-
-def combo(parent, var, values, width=20):
-    cb = ttk.Combobox(parent, textvariable=var, values=values,
-                      width=width, state="readonly", font=FONT_BODY)
-    cb.configure(style="Custom.TCombobox")
-    return cb
-
-def make_scrolled_list(parent, height=14):
-    frame = styled_frame(parent)
-    sb    = tk.Scrollbar(frame, bg=BG2, troughcolor=BG, width=10)
-    lb    = tk.Listbox(frame, bg=BG2, fg=FG, font=FONT_MONO,
-                       selectbackground=ACCENT, selectforeground=FG,
-                       height=height, relief="flat", bd=0,
-                       yscrollcommand=sb.set, activestyle="none")
-    sb.config(command=lb.yview)
-    lb.pack(side="left", fill="both", expand=True)
-    sb.pack(side="right", fill="y")
-    return frame, lb
+from app.ui_kit import (
+    styled_frame, label, btn, entry, _blend_hex, _center_win, _arrow_scale,
+    separator, _enable_mousewheel_scroll, combo, make_scrolled_list,
+    section_title, property_row, card, scrollbar,
+    scaled_geometry, scaled_minsize, _dpi_scale, grid_row, collapsible_section,
+)
+from app.widgets.wizard_widgets import PreviewList, LogPanel, StepBar, WizardPanel
+from app.wizards.rename_settings_panel import RenameSettingsPanel
+from app.wizards.guidemark_sheet import SheetPanel
 
 # =============================================================================
 #  Folder browser widget (reusable)
@@ -1005,58 +352,7 @@ class FolderBrowser(tk.Frame):
 # =============================================================================
 #  Preview list widget
 # =============================================================================
-class PreviewList(tk.Frame):
-    def __init__(self, parent, **kw):
-        super().__init__(parent, bg=BG, **kw)
-        top = styled_frame(self)
-        top.pack(fill="x")
-        label(top, "Preview", font=FONT_H2).pack(side="left")
-        self._count_lbl = label(top, "", font=FONT_SM, fg=FG2)
-        self._count_lbl.pack(side="right")
-        separator(self).pack(fill="x", pady=4)
-        frm, self._lb = make_scrolled_list(self, height=14)
-        frm.pack(fill="both", expand=True)
-
-    def load(self, rows: list[tuple[str,str,str]]):
-        """rows = [(original, arrow, new_name), ...]"""
-        self._lb.delete(0, "end")
-        for orig, arrow, new in rows:
-            self._lb.insert("end", f"  {orig}   {arrow}   {new}")
-        self._count_lbl.config(text=f"{len(rows)} file(s)")
-
-    def clear(self):
-        self._lb.delete(0, "end")
-        self._count_lbl.config(text="")
-
-# =============================================================================
-#  Progress / log widget
-# =============================================================================
-class LogPanel(tk.Frame):
-    def __init__(self, parent, **kw):
-        super().__init__(parent, bg=BG, **kw)
-        label(self, "Log", font=FONT_H2).pack(anchor="w")
-        separator(self).pack(fill="x", pady=4)
-        self._text = tk.Text(self, bg=BG2, fg=FG, font=FONT_MONO,
-                             relief="flat", bd=0, state="disabled", height=12)
-        sb = tk.Scrollbar(self, command=self._text.yview, bg=BG2)
-        self._text.config(yscrollcommand=sb.set)
-        self._text.pack(side="left", fill="both", expand=True)
-        sb.pack(side="right", fill="y")
-        self._text.tag_config("ok",  foreground=FG_GREEN)
-        self._text.tag_config("err", foreground=FG_RED)
-        self._text.tag_config("warn",foreground=FG_YELLOW)
-        self._text.tag_config("dim", foreground=FG2)
-
-    def log(self, msg, tag=""):
-        self._text.config(state="normal")
-        self._text.insert("end", msg + "\n", tag)
-        self._text.see("end")
-        self._text.config(state="disabled")
-
-    def clear(self):
-        self._text.config(state="normal")
-        self._text.delete("1.0","end")
-        self._text.config(state="disabled")
+# PreviewList, LogPanel -- migrated to app/widgets/wizard_widgets.py
 
 # =============================================================================
 #  Image preview pane (live thumbnail + info)
@@ -1174,43 +470,7 @@ class ImagePreviewPane(tk.Frame):
                                   text="Select an image to preview",
                                   fill=FG2, font=FONT_SM, tags="placeholder")
 
-# =============================================================================
-#  Step navigator (breadcrumb)
-# =============================================================================
-class StepBar(tk.Frame):
-    def __init__(self, parent, steps, **kw):
-        super().__init__(parent, bg=BG, **kw)
-        self._labels = []
-        for i, s in enumerate(steps):
-            if i > 0:
-                tk.Label(self, text="›", bg=BG, fg=FG2,
-                         font=("Segoe UI",11)).pack(side="left", padx=2)
-            lbl = tk.Label(self, text=s, bg=BG, fg=FG2, font=FONT_SM, padx=6, pady=2)
-            lbl.pack(side="left")
-            self._labels.append(lbl)
-
-    def set_step(self, idx):
-        for i, lbl in enumerate(self._labels):
-            if i == idx:
-                lbl.config(fg=FG, bg=ACCENT,
-                           font=("Segoe UI",9,"bold"))
-            elif i < idx:
-                lbl.config(fg=FG_GREEN, bg=BG,
-                           font=("Segoe UI",9))
-            else:
-                lbl.config(fg=FG2, bg=BG,
-                           font=("Segoe UI",9))
-
-# =============================================================================
-#  Base wizard panel
-# =============================================================================
-class WizardPanel(tk.Frame):
-    """One step in a wizard. Call show()/hide()."""
-    def __init__(self, parent, **kw):
-        super().__init__(parent, bg=BG, **kw)
-
-    def show(self): self.pack(fill="both", expand=True)
-    def hide(self): self.pack_forget()
+# StepBar, WizardPanel -- migrated to app/widgets/wizard_widgets.py
 
 # =============================================================================
 #  TOOL: RENAME
@@ -1222,7 +482,7 @@ class RenameWizard(tk.Toplevel):
         super().__init__(parent)
         self.title("Image Tool  —  Rename")
         self.configure(bg=BG)
-        self.geometry("860x680")
+        scaled_geometry(self, 860, 680)
         self.resizable(True, True)
         self._step   = 0
         self._folder = None
@@ -1303,93 +563,9 @@ class RenameWizard(tk.Toplevel):
     # ── Step 2: rename settings ───────────────────────────────────────────────
     def _build_s2(self):
         p = WizardPanel(self._content)
-        canvas = tk.Canvas(p, bg=BG, highlightthickness=0)
-        sb     = tk.Scrollbar(p, command=canvas.yview, bg=BG2)
-        canvas.config(yscrollcommand=sb.set)
-        inner  = styled_frame(canvas)
-        inner.bind("<Configure>", lambda e: canvas.config(scrollregion=canvas.bbox("all")))
-        canvas.create_window((0,0), window=inner, anchor="nw")
-        canvas.pack(side="left", fill="both", expand=True)
-        sb.pack(side="right", fill="y")
-
-        # Prefix / suffix
-        label(inner, "Prefix / Suffix", font=FONT_H2).pack(anchor="w", pady=(0,6))
-        r1 = styled_frame(inner); r1.pack(fill="x", pady=2)
-        label(r1, "Prefix:").pack(side="left")
-        self._prefix = entry(r1, width=20); self._prefix.pack(side="left", padx=6)
-        label(r1, "Suffix:").pack(side="left", padx=(12,0))
-        self._suffix = entry(r1, width=20); self._suffix.pack(side="left", padx=6)
-
-        separator(inner).pack(fill="x", pady=10)
-
-        # Number mode
-        label(inner, "Number handling", font=FONT_H2).pack(anchor="w", pady=(0,6))
-        self._num_mode = tk.StringVar(value="1")
-        modes = [
-            ("1", "Keep original filename as-is"),
-            ("2", "Keep only the first digits  (e.g.  03_2nd  →  03)"),
-            ("3", "Replace with counter  (001, 002, …)"),
-            ("4", "Map file numbers to a custom name list"),
-        ]
-        for val, txt in modes:
-            tk.Radiobutton(inner, text=txt, variable=self._num_mode, value=val,
-                           bg=BG, fg=FG, selectcolor=ACCENT,
-                           activebackground=BG, font=FONT_BODY,
-                           command=self._refresh_num_opts).pack(anchor="w", pady=1)
-
-        self._num_opts = styled_frame(inner)
-        self._num_opts.pack(anchor="w", fill="x", pady=(4,0), padx=20)
-
-        # counter opts
-        self._ctr_frame = styled_frame(self._num_opts)
-        r = styled_frame(self._ctr_frame); r.pack(fill="x")
-        label(r, "Start at:").pack(side="left")
-        self._ctr_start = entry(r, width=6); self._ctr_start.insert(0,"1")
-        self._ctr_start.pack(side="left", padx=4)
-        label(r, "Zero-pad width:").pack(side="left", padx=(10,0))
-        self._ctr_pad = entry(r, width=4); self._ctr_pad.insert(0,"3")
-        self._ctr_pad.pack(side="left", padx=4)
-
-        # map opts
-        self._map_frame = styled_frame(self._num_opts)
-        label(self._map_frame, "Name list (comma-separated):", fg=FG2, font=FONT_SM).pack(anchor="w")
-        self._name_map_txt = tk.Text(self._map_frame, bg=BG3, fg=FG, font=FONT_MONO,
-                                     height=3, relief="flat", bd=4,
-                                     insertbackground=FG)
-        self._name_map_txt.pack(fill="x", pady=2)
-        label(self._map_frame, "Example:  E1-1, E1-2, E2-1, E2-2", fg=FG2, font=FONT_SM).pack(anchor="w")
-        r2 = styled_frame(self._map_frame); r2.pack(fill="x", pady=4)
-        label(r2, "File numbering starts at:").pack(side="left")
-        self._map_start = entry(r2, width=6); self._map_start.insert(0,"1")
-        self._map_start.pack(side="left", padx=4)
-
-        separator(inner).pack(fill="x", pady=10)
-
-        # Find/replace
-        label(inner, "Find & Replace  (optional)", font=FONT_H2).pack(anchor="w", pady=(0,6))
-        r3 = styled_frame(inner); r3.pack(fill="x", pady=2)
-        label(r3, "Find:").pack(side="left")
-        self._find = entry(r3, width=20); self._find.pack(side="left", padx=6)
-        label(r3, "Replace with:").pack(side="left", padx=(12,0))
-        self._replace = entry(r3, width=20); self._replace.pack(side="left", padx=6)
-
-        separator(inner).pack(fill="x", pady=10)
-
-        # Skip
-        label(inner, "Skip files  (optional)", font=FONT_H2).pack(anchor="w", pady=(0,6))
-        r4 = styled_frame(inner); r4.pack(fill="x", pady=2)
-        label(r4, "Skip filenames containing:").pack(side="left")
-        self._skip = entry(r4, width=24); self._skip.pack(side="left", padx=6)
-
-        self._refresh_num_opts()
+        self._settings_panel = RenameSettingsPanel(p)
+        self._settings_panel.pack(fill="both", expand=True)
         return p
-
-    def _refresh_num_opts(self):
-        for w in self._num_opts.winfo_children():
-            w.pack_forget()
-        m = self._num_mode.get()
-        if m == "3": self._ctr_frame.pack(fill="x")
-        if m == "4": self._map_frame.pack(fill="x")
 
     # ── Step 3: preview ───────────────────────────────────────────────────────
     def _build_s3(self):
@@ -1470,59 +646,19 @@ class RenameWizard(tk.Toplevel):
         return True
 
     def _build_cfg(self):
-        nm = self._num_mode.get()
-        name_map = [x.strip() for x in
-                    re.split(r'[,、]', self._name_map_txt.get("1.0","end"))
-                    if x.strip()]
-        try: start = int(self._ctr_start.get())
-        except: start = 1
-        try: pad = int(self._ctr_pad.get())
-        except: pad = 3
-        try: map_start = int(self._map_start.get())
-        except: map_start = 1
-        self._cfg = {
-            "prefix":    self._prefix.get(),
-            "suffix":    self._suffix.get(),
-            "num_mode":  nm,
-            "start_num": start,
-            "pad_width": pad,
-            "name_map":  name_map,
-            "map_start": map_start,
-            "find_text": self._find.get(),
-            "replace_text": self._replace.get(),
-            "skip":      self._skip.get().strip(),
-        }
+        self._cfg = self._settings_panel.get_cfg()
 
     def _build_preview(self):
-        skip = self._cfg.get("skip","")
-        files = [f for f in self._files if skip not in f.name] if skip else self._files
-        c = [self._cfg["start_num"]]
-        rows = []
-        for f in files:
-            new = compute_new_name(f, self._cfg, c)
-            rows.append((f.name, "→", new))
+        rows = RenameJob(self._files, self._cfg).preview()
         self._preview.load(rows)
-        self._filtered_files = files
-        n = len(files)
         if hasattr(self, "_preview_count_lbl"):
-            self._preview_count_lbl.config(text=f"{n} file(s)")
+            self._preview_count_lbl.config(text=f"{len(rows)} file(s)")
 
     def _execute(self):
         self._goto(4)
         self._log.clear()
-        skip     = self._cfg.get("skip","")
-        files    = [f for f in self._files if skip not in f.name] if skip else self._files
-        counter  = [self._cfg["start_num"]]
-        success  = 0; failures = 0
-        for f in files:
-            try:
-                new_name = compute_new_name(f, self._cfg, counter)
-                f.rename(f.parent / new_name)
-                self._log.log(f"  {f.name}  →  {new_name}", "ok")
-                success += 1
-            except Exception as e:
-                self._log.log(f"  FAILED: {f.name} — {e}", "err")
-                failures += 1
+        job = RenameJob(self._files, self._cfg)
+        success, failures, _errors = job.execute(log_cb=self._log.log)
         self._log.log(f"\n  Done — {success} file(s) renamed.", "ok")
         if failures:
             self._log.log(f"  {failures} file(s) failed.", "err")
@@ -1538,7 +674,7 @@ class CompressWizard(tk.Toplevel):
         super().__init__(parent)
         self.title("Image Tool  —  Compress")
         self.configure(bg=BG)
-        self.geometry("1100x720")
+        scaled_geometry(self, 1100, 720)
         self.resizable(True, True)
         self._step   = 0
         self._folder = None
@@ -1910,7 +1046,7 @@ class ResizeWizard(tk.Toplevel):
         super().__init__(parent)
         self.title("Image Tool  —  Resize")
         self.configure(bg=BG)
-        self.geometry("1100x700")
+        scaled_geometry(self, 1100, 700)
         self.resizable(True, True)
         self._step   = 0
         self._folder = None
@@ -1988,6 +1124,7 @@ class ResizeWizard(tk.Toplevel):
             ("3","Fit inside a box  (keep aspect ratio)"),
             ("4","Exact size  (may stretch)"),
             ("5","Scale by percentage"),
+            ("6","Fit on canvas  (black bars + credit text)"),
         ]
         for val, txt in modes:
             tk.Radiobutton(left, text=txt, variable=self._resize_mode, value=val,
@@ -2014,6 +1151,55 @@ class ResizeWizard(tk.Toplevel):
         self._pct_entry.bind("<FocusOut>", lambda _: self._trigger_resize_preview())
         self._pct_entry.bind("<Return>",   lambda _: self._trigger_resize_preview())
 
+        # ── Mode 6 options: canvas colour + credit text ─────────────────────
+        self._canvas_opts = styled_frame(left)
+
+        self._canvas_color = tk.StringVar(value="#000000")
+        crow = styled_frame(self._canvas_opts); crow.pack(fill="x", pady=2)
+        label(crow, "Canvas colour:").pack(side="left")
+        self._canvas_sw = tk.Frame(crow, width=20, height=20, bg=self._canvas_color.get(), relief="flat")
+        self._canvas_sw.pack_propagate(False)
+        self._canvas_sw.pack(side="left", padx=6)
+        def _pick_canvas_color():
+            dlg = ColorPickerDialog(self, initial=self._canvas_color.get())
+            self.wait_window(dlg)
+            if dlg.result:
+                self._canvas_color.set(dlg.result)
+                self._canvas_sw.config(bg=dlg.result)
+                self._trigger_resize_preview()
+        btn(crow, "Choose…", _pick_canvas_color, primary=False).pack(side="left")
+
+        crow2 = styled_frame(self._canvas_opts); crow2.pack(fill="x", pady=(8,2))
+        label(crow2, "Credit text:").pack(side="left")
+        self._credit_text = entry(crow2, width=22)
+        self._credit_text.pack(side="left", padx=6)
+        self._credit_text.bind("<FocusOut>", lambda _: self._trigger_resize_preview())
+        self._credit_text.bind("<Return>",   lambda _: self._trigger_resize_preview())
+
+        crow3 = styled_frame(self._canvas_opts); crow3.pack(fill="x", pady=2)
+        label(crow3, "Position:").pack(side="left")
+        self._credit_pos = tk.StringVar(value="bottom-right")
+        pos_combo = combo(crow3, self._credit_pos,
+                           ["bottom-right","bottom-left","bottom-center","top-right","top-left"],
+                           width=14)
+        pos_combo.pack(side="left", padx=6)
+        pos_combo.bind("<<ComboboxSelected>>", lambda _: self._trigger_resize_preview())
+
+        crow4 = styled_frame(self._canvas_opts); crow4.pack(fill="x", pady=2)
+        label(crow4, "Text colour:").pack(side="left")
+        self._credit_color = tk.StringVar(value="#ffffff")
+        self._credit_sw = tk.Frame(crow4, width=20, height=20, bg=self._credit_color.get(), relief="flat")
+        self._credit_sw.pack_propagate(False)
+        self._credit_sw.pack(side="left", padx=6)
+        def _pick_credit_color():
+            dlg = ColorPickerDialog(self, initial=self._credit_color.get())
+            self.wait_window(dlg)
+            if dlg.result:
+                self._credit_color.set(dlg.result)
+                self._credit_sw.config(bg=dlg.result)
+                self._trigger_resize_preview()
+        btn(crow4, "Choose…", _pick_credit_color, primary=False).pack(side="left")
+
         separator(left).pack(fill="x", pady=10)
         label(left, "JPEG quality for saved files", font=FONT_H2).pack(anchor="w", pady=(0,6))
         rq = styled_frame(left); rq.pack(fill="x")
@@ -2038,6 +1224,7 @@ class ResizeWizard(tk.Toplevel):
         self._tw.master.pack_forget()
         self._th.master.pack_forget()
         self._pct_entry.pack_forget()
+        self._canvas_opts.pack_forget()
         if m == "1":
             self._tw.master.pack(fill="x", pady=2)
         elif m == "2":
@@ -2045,6 +1232,10 @@ class ResizeWizard(tk.Toplevel):
         elif m in ("3","4"):
             self._tw.master.pack(fill="x", pady=2)
             self._th.master.pack(fill="x", pady=2)
+        elif m == "6":
+            self._tw.master.pack(fill="x", pady=2)
+            self._th.master.pack(fill="x", pady=2)
+            self._canvas_opts.pack(fill="x", pady=(8,0))
         else:
             r = styled_frame(self._resize_opts); r.pack(fill="x", pady=2)
             label(r, "Scale %:").pack(side="left")
@@ -2058,6 +1249,13 @@ class ResizeWizard(tk.Toplevel):
         cfg = self._get_resize_cfg()
         def render(img: Image.Image, src_path: Path):
             w, h = img.width, img.height
+            if cfg.get("resize_mode") == "6":
+                try:
+                    result = compute_canvas_fit(img, cfg)
+                except Exception:
+                    return img, "Enter valid dimensions"
+                info = f"{w}×{h}  →  {result.width}×{result.height}  (canvas)"
+                return result, info
             try:
                 nw, nh = compute_new_size(w, h, cfg)
                 if nw <= 0 or nh <= 0:
@@ -2149,7 +1347,12 @@ class ResizeWizard(tk.Toplevel):
         try: pct = float(self._pct_entry.get())
         except: pct = 100.0
         return {"resize_mode": m, "target_w": tw, "target_h": th,
-                "pct": pct, "jpeg_quality": self._jpeg_q.get()}
+                "pct": pct, "jpeg_quality": self._jpeg_q.get(),
+                "canvas_color": self._canvas_color.get(),
+                "credit_text": self._credit_text.get(),
+                "credit_pos": self._credit_pos.get(),
+                "credit_color": self._credit_color.get(),
+                "credit_font": "Arial"}
 
     def _build_preview(self):
         cfg  = self._get_resize_cfg()
@@ -2158,7 +1361,10 @@ class ResizeWizard(tk.Toplevel):
             try:
                 img = Image.open(f)
                 w, h = img.width, img.height
-                nw, nh = compute_new_size(w, h, cfg)
+                if cfg.get("resize_mode") == "6":
+                    nw, nh = int(cfg.get("target_w", 0)), int(cfg.get("target_h", 0))
+                else:
+                    nw, nh = compute_new_size(w, h, cfg)
                 rows.append((f.name, "→", f"{w}×{h}  →  {nw}×{nh}"))
             except Exception as e:
                 rows.append((f.name, "!", str(e)))
@@ -2183,7 +1389,10 @@ class ResizeWizard(tk.Toplevel):
                     dst = d / f.name
                 img    = Image.open(f)
                 w, h   = img.width, img.height
-                nw, nh = compute_new_size(w, h, cfg)
+                if cfg.get("resize_mode") == "6":
+                    nw, nh = int(cfg.get("target_w", 0)), int(cfg.get("target_h", 0))
+                else:
+                    nw, nh = compute_new_size(w, h, cfg)
                 do_resize(f, dst, cfg)
                 self._log.log(f"  {f.name}  →  {nw}×{nh}", "ok")
                 success += 1
@@ -2203,7 +1412,7 @@ class PipelineWizard(tk.Toplevel):
         super().__init__(parent)
         self.title("Image Tool  —  Pipeline")
         self.configure(bg=BG)
-        self.geometry("500x340")
+        scaled_geometry(self, 500, 340)
         self.resizable(False, False)
         self._parent = parent
         self._build()
@@ -2325,12 +1534,14 @@ class ColorPickerDialog(tk.Toplevel):
         swatch_col = tk.Frame(top, bg=BG, padx=PAD)
         swatch_col.pack(side="left", fill="y")
         label(swatch_col, "Nouveau", fg=FG2, font=FONT_SM, bg=BG).pack(anchor="w")
-        self._new_swatch = tk.Frame(swatch_col, width=52, height=52, bg="#ffffff")
+        self._new_swatch = tk.Frame(swatch_col, width=52, height=52, bg="#ffffff",
+                                    highlightbackground=BORDER, highlightthickness=1)
         self._new_swatch.pack(pady=(0, 4))
         label(swatch_col, "Initial", fg=FG2, font=FONT_SM, bg=BG).pack(anchor="w")
         r0, g0, b0 = self._hex_to_rgb("#ffffff")
         self._orig_swatch = tk.Frame(swatch_col, width=52, height=52,
-                                     bg=self._rgb_to_hex(r0, g0, b0))
+                                     bg=self._rgb_to_hex(r0, g0, b0),
+                                     highlightbackground=BORDER, highlightthickness=1)
         self._orig_swatch.pack()
 
         # ── Row 2: fields ─────────────────────────────────────────────────────
@@ -2351,7 +1562,8 @@ class ColorPickerDialog(tk.Toplevel):
         self._hex_entry.pack(side="left", padx=6)
         self._hex_entry.bind("<Return>",     self._on_hex_enter)
         self._hex_entry.bind("<FocusOut>",   self._on_hex_enter)
-        self._live_swatch = tk.Frame(hex_row, width=28, height=22, bg="#ffffff")
+        self._live_swatch = tk.Frame(hex_row, width=28, height=22, bg="#ffffff",
+                                     highlightbackground=BORDER, highlightthickness=1)
         self._live_swatch.pack(side="left", padx=4)
 
         # RGB sliders
@@ -2617,7 +1829,7 @@ def _read_font_name(path: str):
                 nid  = _st.unpack('>H', recs[b+6:b+8])[0]
                 nlen = _st.unpack('>H', recs[b+8:b+10])[0]
                 noff = _st.unpack('>H', recs[b+10:b+12])[0]
-                if nid not in (1, 2):
+                if nid not in (1, 2, 16, 17):
                     continue
                 pri = 2 if plat == 3 else 1   # prefer Windows Unicode platform
                 if nid in best and best[nid][0] >= pri:
@@ -2629,8 +1841,12 @@ def _read_font_name(path: str):
                         best[nid] = (pri, s)
                 except Exception:
                     pass
-            family = best.get(1, (0, ''))[1]
-            style  = best.get(2, (0, 'Regular'))[1] or 'Regular'
+            # Prefer the typographic family/subfamily (16/17) over the legacy
+            # 1/2 records: Adobe "Std" OTFs group weights into 4-style legacy
+            # families (e.g. Heavy reported as "Futura Std Medium"/"Bold") for
+            # old RIP compatibility, which hides real weights under the wrong name.
+            family = best.get(16, best.get(1, (0, '')))[1]
+            style  = best.get(17, best.get(2, (0, 'Regular')))[1] or 'Regular'
             return family.strip(), style.strip()
     except Exception:
         return '', 'Regular'
@@ -2701,10 +1917,20 @@ def _get_font_families() -> dict:
                 flat[key] = path
     _INSTALLED_FONTS = dict(sorted(flat.items()))
     # ── Save cache (includes file count for fast change detection) ──────────
+    # Preserve any existing jp_support scan results — a font-list rebuild
+    # (e.g. new font installed) shouldn't throw away prior JP analysis.
+    jp_support = {}
+    if _FONT_CACHE_FILE.exists():
+        try:
+            with open(_FONT_CACHE_FILE, "r", encoding="utf-8") as f:
+                jp_support = json.load(f).get("jp_support", {})
+        except Exception:
+            jp_support = {}
     try:
         with open(_FONT_CACHE_FILE, "w", encoding="utf-8") as f:
             json.dump({"families": _FONT_FAMILIES, "flat": _INSTALLED_FONTS,
-                       "file_count": _count_font_files()},
+                       "file_count": _count_font_files(),
+                       "jp_support": jp_support},
                       f, ensure_ascii=False)
     except Exception:
         pass
@@ -2806,75 +2032,12 @@ def _parse_num_list(s: str) -> list:
     return result
 
 
-def _draw_tracked(drw, text, fnt, cx, cy, fill_rgba, tracking):
-    """Draw text centered at (cx,cy) with per-character letter spacing."""
-    if not text:
-        return
-    advances = []
-    for ch in text:
-        try:
-            adv = fnt.getlength(ch)
-        except AttributeError:
-            bb = drw.textbbox((0, 0), ch, font=fnt)
-            adv = bb[2] - bb[0]
-        advances.append(int(adv))
-    total_w = sum(advances) + tracking * (len(text) - 1)
-    x = cx - total_w // 2
-    for ch, adv in zip(text, advances):
-        drw.text((x, cy), ch, fill=fill_rgba, font=fnt, anchor="lm")
-        x += adv + tracking
-
-
-def _draw_optical(drw, text, fnt, cx, cy, fill_rgba, tracking):
-    """Optical kerning: space characters by their visual ink extents, not advance widths."""
-    if not text:
-        return
-    from PIL import Image as _OI, ImageDraw as _OD
-    ink_widths = []
-    ink_left_pads = []
-    for ch in text:
-        # Render char on tiny canvas, measure actual ink bounds
-        bb = drw.textbbox((0, 0), ch, font=fnt)
-        ch_w = max(1, bb[2] - bb[0])
-        ch_h = max(1, bb[3] - bb[1])
-        tmp = _OI.new("L", (ch_w + 20, ch_h + 20), 0)
-        _OD.Draw(tmp).text((10 - bb[0], 10 - bb[1]), ch, fill=255, font=fnt)
-        col_sums = [sum(tmp.getdata()[r * tmp.width + c]
-                        for r in range(tmp.height))
-                    for c in range(tmp.width)]
-        nonzero = [i for i, v in enumerate(col_sums) if v > 0]
-        if nonzero:
-            ink_l = nonzero[0]
-            ink_r = nonzero[-1]
-            ink_widths.append(ink_r - ink_l + 1)
-            ink_left_pads.append(ink_l)
-        else:
-            # Whitespace char
-            try:
-                adv = int(fnt.getlength(ch))
-            except AttributeError:
-                adv = ch_w
-            ink_widths.append(adv)
-            ink_left_pads.append(0)
-    # Visual gap between chars: ~20% of average ink width + tracking
-    avg_ink = sum(ink_widths) / max(1, len(ink_widths))
-    gap = max(0, int(avg_ink * 0.20)) + tracking
-    total_w = sum(ink_widths) + gap * (len(text) - 1)
-    x = cx - total_w // 2
-    for ch, iw, il in zip(text, ink_widths, ink_left_pads):
-        # Draw so the ink's left edge aligns to x
-        bb = drw.textbbox((0, 0), ch, font=fnt)
-        draw_x = x - il - bb[0]
-        drw.text((draw_x, cy), ch, fill=fill_rgba, font=fnt, anchor="lm")
-        x += iw + gap
-
-
 def _gen_image(number, width, height, bg_mode, bg_color, bg_image_path,
                text_color, font_name, font_size, corner_mode, corner_radius,
                shadow_on=False, shadow_color="#000000", shadow_offset_x=4, shadow_offset_y=4,
                shadow_blur=3,
                pos_manual=False, pos_x=None, pos_y=None,
-               auto_fit=False, letter_spacing=0):
+               auto_fit=False, letter_spacing=0, custom_text=""):
     from PIL import Image as _Img, ImageDraw as _IDrw, ImageFilter as _IFilt
     if bg_mode == "color":
         rgb = _hex_to_rgb(bg_color)
@@ -2883,7 +2046,7 @@ def _gen_image(number, width, height, bg_mode, bg_color, bg_image_path,
         bg = _Img.open(bg_image_path).convert("RGBA")
         img = bg.resize((width, height), _Img.LANCZOS)
     draw = _IDrw.Draw(img)
-    text = str(number)
+    text = custom_text if custom_text else str(number)
     # Auto-fit: shrink font_size so text stays within 88% of canvas
     if auto_fit:
         max_tw, max_th = int(width * 0.88), int(height * 0.88)
@@ -2894,9 +2057,8 @@ def _gen_image(number, width, height, bg_mode, bg_color, bg_image_path,
                 _tw, _th = _bb[2] - _bb[0], _bb[3] - _bb[1]
             except AttributeError:
                 _tw, _th = draw.textsize(text, font=_f)
-            # Account for tracking in width check
-            if letter_spacing != 0:
-                _tw += letter_spacing * max(0, len(text) - 1)
+            # Account for tracking in width check (always applied)
+            _tw += letter_spacing * max(0, len(text) - 1)
             if _tw <= max_tw and _th <= max_th:
                 break
             font_size -= 2
@@ -2911,22 +2073,25 @@ def _gen_image(number, width, height, bg_mode, bg_color, bg_image_path,
         sh_rgba  = _hex_to_rgb(shadow_color) + (200,)
         sh_layer = _Img.new("RGBA", img.size, (0, 0, 0, 0))
         sh_draw  = _IDrw.Draw(sh_layer)
-        if letter_spacing != 0:
-            _draw_tracked(sh_draw, text, font,
-                          cx + int(shadow_offset_x), cy + int(shadow_offset_y),
-                          sh_rgba, letter_spacing)
-        else:
-            sh_draw.text((cx + int(shadow_offset_x), cy + int(shadow_offset_y)),
-                         text, fill=sh_rgba, font=font, anchor="mm")
+        _draw_tracked(sh_draw, text, font,
+                      cx + int(shadow_offset_x), cy + int(shadow_offset_y),
+                      sh_rgba, letter_spacing)
         if shadow_blur > 0:
-            sh_layer = sh_layer.filter(_IFilt.GaussianBlur(radius=max(1, int(shadow_blur))))
+            # Blur only the alpha channel and keep RGB flat/uniform.
+            # GaussianBlur on a straight (non-premultiplied) RGBA image blurs
+            # R/G/B/A independently, so the soft edge blends the shadow colour
+            # with the transparent backdrop's black RGB(0,0,0) — producing a
+            # visible dark fringe/outline distinct from the shadow colour.
+            # Since the shadow is a single flat colour, there's nothing to
+            # premultiply/un-premultiply: just blur alpha and re-flood the RGB.
+            alpha = sh_layer.split()[3].filter(
+                _IFilt.GaussianBlur(radius=max(1, int(shadow_blur))))
+            sh_layer = _Img.new("RGBA", img.size, sh_rgba[:3] + (0,))
+            sh_layer.putalpha(alpha)
         img = _Img.alpha_composite(img, sh_layer)
         draw = _IDrw.Draw(img)
     text_rgba = _hex_to_rgb(text_color) + (255,)
-    if letter_spacing != 0:
-        _draw_tracked(draw, text, font, cx, cy, text_rgba, letter_spacing)
-    else:
-        draw.text((cx, cy), text, fill=text_rgba, font=font, anchor="mm")
+    _draw_tracked(draw, text, font, cx, cy, text_rgba, letter_spacing)
     if corner_mode == "rounded" and corner_radius > 0:
         img = _apply_rounded_mask(img, corner_radius)
     return img  # always RGBA
@@ -2953,12 +2118,14 @@ class FontPreviewDialog(tk.Toplevel):
         self._photos: dict = {}
         self._render_gen  = 0   # incremented on each rebuild to discard stale renders
         self._executor    = _futures.ThreadPoolExecutor(max_workers=self._MAX_WORKERS)
+        self._jp_only     = tk.BooleanVar(value=False)
+        self._jp_scan_gen = 0   # incremented to cancel a stale background JP scan
+        self._jp_scanning = False
         self._build()
         self.update_idletasks()
         pw, py = parent.winfo_rootx(), parent.winfo_rooty()
         pw2, ph2 = parent.winfo_width(), parent.winfo_height()
-        w, h = 560, 640
-        self.geometry(f"{w}x{h}")
+        scaled_geometry(self, 560, 640)
         _center_win(self)
         self._rebuild_rows()
 
@@ -2975,6 +2142,11 @@ class FontPreviewDialog(tk.Toplevel):
         self._filter_after = None
         self._search_var.trace_add("write", lambda *_: self._schedule_filter())
         e.focus_set()
+
+        tk.Checkbutton(top, text=_t("fpd.jp_only"), variable=self._jp_only,
+                       bg=BG, fg=FG, selectcolor=BG3, activebackground=BG,
+                       font=FONT_SM, command=self._toggle_jp_only
+                       ).pack(side="right", padx=(8, 0))
 
         container = tk.Frame(self, bg=BG)
         container.pack(fill="both", expand=True, padx=12, pady=(0, 4))
@@ -3004,6 +2176,7 @@ class FontPreviewDialog(tk.Toplevel):
 
     def destroy(self):
         self._render_gen = -1   # sentinel: discard all pending render callbacks
+        self._jp_scan_gen += 1  # cancel any in-flight JP scan
         if self._filter_after is not None:
             try:
                 self.after_cancel(self._filter_after)
@@ -3024,9 +2197,60 @@ class FontPreviewDialog(tk.Toplevel):
     def _filter(self):
         self._filter_after = None
         q = self._search_var.get().lower()
-        self._filtered = ([f for f in self._all_fonts if q in f.lower()]
-                          if q else list(self._all_fonts))
+        base = [f for f in self._all_fonts if q in f.lower()] if q else list(self._all_fonts)
+        if self._jp_only.get():
+            installed = _get_installed_fonts()
+            cache = _load_jp_support_cache(_FONT_CACHE_FILE)
+            base = [f for f in base if cache.get(installed.get(f, ""))]
+        self._filtered = base
         self._rebuild_rows()
+
+    def _toggle_jp_only(self):
+        if self._jp_only.get():
+            self._start_jp_scan()
+        else:
+            self._filter()
+
+    def _start_jp_scan(self):
+        """Ensure every currently-listed font has a cached JP-support result,
+        computing missing ones in a background thread so the UI stays
+        responsive, then re-applies the filter."""
+        self._jp_scan_gen += 1
+        gen = self._jp_scan_gen
+        installed = _get_installed_fonts()
+        cache = _load_jp_support_cache(_FONT_CACHE_FILE)
+        missing = [p for p in installed.values() if p and p not in cache]
+        if not missing:
+            self._filter()
+            return
+        self._jp_scanning = True
+        total = len(missing)
+
+        def _worker():
+            for i, path in enumerate(missing, 1):
+                if self._jp_scan_gen != gen:
+                    return  # cancelled: dialog closed or toggled again
+                _get_jp_support(_FONT_CACHE_FILE, path, persist=False)
+                if i % 25 == 0 or i == total:
+                    self.after(0, lambda i=i: self._on_jp_scan_progress(i, total, gen))
+            _save_jp_support_cache(_FONT_CACHE_FILE)
+            self.after(0, lambda: self._on_jp_scan_done(gen))
+
+        try:
+            self._executor.submit(_worker)
+        except RuntimeError:
+            pass  # executor already shut down
+
+    def _on_jp_scan_progress(self, done: int, total: int, gen: int):
+        if self._jp_scan_gen != gen:
+            return
+        self._count_lbl.config(text=_t("fpd.jp_scanning", n=done, total=total))
+
+    def _on_jp_scan_done(self, gen: int):
+        if self._jp_scan_gen != gen:
+            return
+        self._jp_scanning = False
+        self._filter()
 
     def _refresh_fonts(self):
         """Force-rebuild the font cache (picks up any newly installed fonts)."""
@@ -3136,6 +2360,7 @@ class ImageGenWizard(tk.Toplevel):
         self._bg_pattern: list = []   # list of paths for cycling pattern mode
 
         self._num_list   = tk.StringVar(value="1-10")
+        self._custom_text_var = tk.StringVar(value="")
         self._auto_fsize = tk.BooleanVar(value=True)
         self._font_family = tk.StringVar(value="Impact")
         self._font_style  = tk.StringVar(value="Regular")
@@ -3183,7 +2408,7 @@ class ImageGenWizard(tk.Toplevel):
 
         self.update_idletasks()
         pw, py = parent.winfo_rootx(), parent.winfo_rooty()
-        self.geometry(f"{self.WIN_W}x{self.WIN_H}")
+        scaled_geometry(self, self.WIN_W, self.WIN_H)
         _center_win(self)
 
     # ── Scaffold ──────────────────────────────────────────────────────────────
@@ -3253,7 +2478,7 @@ class ImageGenWizard(tk.Toplevel):
         watch = [
             self._w_var, self._h_var,
             self._bg_color, self._bg_img, self._bg_mode,
-            self._num_list, self._font_path, self._fsize, self._tcol,
+            self._num_list, self._custom_text_var, self._font_path, self._fsize, self._tcol,
             self._shadow_col, self._shadow_ox, self._shadow_oy, self._shadow_blur,
             self._pos_x, self._pos_y,
             self._corner, self._radius, self._guide_margin, self._tracking,
@@ -3309,6 +2534,7 @@ class ImageGenWizard(tk.Toplevel):
             pos_y=int(self._pos_y.get() or 0),
             auto_fit=self._auto_fsize.get(),
             letter_spacing=self._tracking.get(),
+            custom_text=self._custom_text_var.get().strip(),
         )
         guide_on     = self._guide_on.get()
         guide_margin = self._guide_margin.get()
@@ -3480,6 +2706,20 @@ class ImageGenWizard(tk.Toplevel):
                 self._h_var.set(str(hh))
             btn(row1, display, _apply_c, primary=True).pack(side="left", padx=3)
 
+        # ── Banner presets row
+        row_banners = styled_frame(p)
+        row_banners.pack(anchor="w", pady=(2, 2))
+        label(row_banners, _t("s0.banners"), fg=FG2, font=FONT_SM).pack(side="left", padx=(0, 8))
+        def _apply_bandeau():
+            self._link_wh.set(False)
+            self._w_var.set("1054")
+            self._h_var.set("250")
+            self._custom_text_var.set("展覧会公式サイトはこちら")
+            self._auto_fsize.set(False)
+            self._fsize.set("70")
+        btn(row_banners, "展覧会公式サイトはこちら  1054×250",
+            _apply_bandeau, primary=True).pack(side="left", padx=3)
+
         # ── Generic presets row
         presets_generic = [
             ("100×100", 100, 100), ("200×200", 200, 200), ("400×400", 400, 400),
@@ -3644,6 +2884,7 @@ class ImageGenWizard(tk.Toplevel):
             "out_folder": self._out_folder.get(),
             "guide_on": self._guide_on.get(), "guide_margin": self._guide_margin.get(),
             "tracking": self._tracking.get(),
+            "custom_text": self._custom_text_var.get(),
         }
 
     def _apply_preset(self, state: dict):
@@ -3675,6 +2916,7 @@ class ImageGenWizard(tk.Toplevel):
             self._guide_margin.set(int(state["guide_margin"]))
         if "tracking" in state:
             self._tracking.set(int(state["tracking"]))
+        sv(self._custom_text_var, "custom_text")
         self._update_font_path()
         self._update_preview()
 
@@ -3902,6 +3144,18 @@ class ImageGenWizard(tk.Toplevel):
                 fg=FG_GREEN if n > 0 else FG_RED)
         self._num_list.trace_add("write", _upd_count)
         _upd_count()
+
+        # ── Custom text (optional — overrides number) ─────────────────────────
+        ct_row = styled_frame(inner)
+        ct_row.pack(anchor="w", fill="x", pady=(10, 0))
+        label(ct_row, _t("s2.custom_text")).pack(side="left")
+        tk.Entry(ct_row, textvariable=self._custom_text_var,
+                 bg=BG3, fg=FG, insertbackground=FG, relief="flat",
+                 font=FONT_BODY, width=36).pack(side="left", padx=6)
+        btn(ct_row, "✕", lambda: self._custom_text_var.set(""),
+            primary=False).pack(side="left")
+        label(inner, _t("s2.custom_text_hint"), fg=FG2, font=FONT_SM).pack(
+            anchor="w", pady=(2, 0))
 
         separator(inner).pack(fill="x", pady=8)
 
@@ -4632,10 +3886,14 @@ class ImageGenWizard(tk.Toplevel):
 
     # ── Execute ───────────────────────────────────────────────────────────────
     def _execute(self):
-        nums = _parse_num_list(self._num_list.get())
-        if not nums:
-            messagebox.showerror(_t("err.empty_list"), _t("err.empty_msg"), parent=self)
-            return
+        ctext = self._custom_text_var.get().strip()
+        if ctext:
+            nums = ["banner"]
+        else:
+            nums = _parse_num_list(self._num_list.get())
+            if not nums:
+                messagebox.showerror(_t("err.empty_list"), _t("err.empty_msg"), parent=self)
+                return
         try:
             w   = int(self._w_var.get())
             h   = int(self._h_var.get())
@@ -4682,6 +3940,7 @@ class ImageGenWizard(tk.Toplevel):
         p_y      = int(self._pos_y.get() or 0)
         auto_fit = self._auto_fsize.get()
         tracking = self._tracking.get()
+        ctext_snap = ctext  # snapshot for thread
 
         bg_pattern = list(self._bg_pattern)  # snapshot for thread
 
@@ -4705,8 +3964,9 @@ class ImageGenWizard(tk.Toplevel):
                                      shadow_offset_x=sh_ox, shadow_offset_y=sh_oy,
                                      shadow_blur=sh_bl,
                                      pos_manual=p_man, pos_x=p_x, pos_y=p_y,
-                                     auto_fit=auto_fit, letter_spacing=tracking)
-                    dest = out_dir / f"{prefix}{number}{suffix}{ext}"
+                                     auto_fit=auto_fit, letter_spacing=tracking,
+                                     custom_text=ctext_snap)
+                    dest = out_dir / f"{prefix}{'banner' if ctext_snap else number}{suffix}{ext}"
                     if fmt == "JPEG":
                         from PIL import Image as _Img
                         flat = _Img.new("RGBA", img.size, (255, 255, 255, 255))
@@ -4859,8 +4119,7 @@ class ItemDialog(tk.Toplevel):
         # Centre on screen
         pw = parent.winfo_rootx()
         py = parent.winfo_rooty()
-        w, h = 460, 340
-        self.geometry(f"{w}x{h}")
+        scaled_geometry(self, 460, 340)
         _center_win(self)
 
     def _build(self, label_val, text_val):
@@ -4923,7 +4182,7 @@ class ClipboardManager(tk.Toplevel):
         self.title("📋  Presse-papier intelligent")
         self.configure(bg=BG)
         self.resizable(True, True)
-        self.minsize(660, 420)
+        scaled_minsize(self, 660, 420)
 
         self._data = load_clipboard_data()
         self._cat_idx = 0       # currently selected category index
@@ -4934,7 +4193,7 @@ class ClipboardManager(tk.Toplevel):
         self._refresh_cats()
         self.update_idletasks()
         pw, py = parent.winfo_rootx(), parent.winfo_rooty()
-        self.geometry(f"{self.WIN_W}x{self.WIN_H}")
+        scaled_geometry(self, self.WIN_W, self.WIN_H)
         _center_win(self)
 
     # ── Layout ────────────────────────────────────────────────────────────────
@@ -5301,7 +4560,7 @@ class ConvertWizard(tk.Toplevel):
         super().__init__(parent)
         self.title("Image Tool  —  Convert")
         self.configure(bg=BG)
-        self.geometry("920x680")
+        scaled_geometry(self, 920, 680)
         self.resizable(True, True)
         self._folder = None
         self._files  = []
@@ -5498,18 +4757,20 @@ class GuideMarkWizard(tk.Toplevel):
         os.path.dirname(os.path.abspath(__file__)),
         "_guidemark_presets.json")
 
-    PAPER_MM = {
-        "A3ノビ  (483×329 mm)": (483, 329),
-        "A3  (420×297 mm)":     (420, 297),
-        "A4  (297×210 mm)":     (297, 210),
-    }
+    PAPER_MM = PAPER_MM
+
+    # Reference DPI for stored tracking values (see _render_tile) — chosen
+    # as 150 because Step 1's tile preview already renders at 150 DPI and
+    # was already visually faithful to a real export; tracking is scaled
+    # from this reference to whatever DPI a given render actually uses.
+    TRACKING_REF_DPI = TRACKING_REF_DPI
 
     def __init__(self, master):
         super().__init__(master)
         self.title(_t("gmw.title"))
         self.configure(bg=BG)
-        self.geometry("980x660")
-        self.minsize(780, 520)
+        scaled_geometry(self, 980, 660)
+        scaled_minsize(self, 780, 520)
         self.resizable(True, True)
 
         self._step = 0
@@ -5531,6 +4792,7 @@ class GuideMarkWizard(tk.Toplevel):
         self._printer       = tk.StringVar(value="")
         self._printers: list = []
         self._monochrome    = tk.BooleanVar(value=True)
+        self._k_pct         = tk.IntVar(value=70)
         self._num_font_fam  = tk.StringVar(value="Futura Std")
         self._num_font_sty  = tk.StringVar(value="Medium")
         self._num_font_display = tk.StringVar(value="Futura Std Medium")
@@ -5574,6 +4836,11 @@ class GuideMarkWizard(tk.Toplevel):
         self._layout_page_str = tk.StringVar(value="—")
         self._cut_line_show   = tk.BooleanVar(value=True)
         self._cut_line_pt     = tk.DoubleVar(value=0.2)
+        # Illustrator (SVG) export
+        self._svg_marks       = tk.StringVar(value="tombo")
+        self._svg_bleed       = tk.DoubleVar(value=3.0)
+        self._svg_mark_len    = tk.DoubleVar(value=2.0)
+        self._svg_outline     = tk.BooleanVar(value=False)
         self._preset_name     = tk.StringVar(value="")
         self._presets: list   = self._load_presets()
         self._thumb_cache: dict = {}
@@ -5582,7 +4849,7 @@ class GuideMarkWizard(tk.Toplevel):
         self._refresh_cards()
         self._load_printers_async()
 
-        for v in (self._monochrome,
+        for v in (self._monochrome, self._k_pct,
                   self._num_font_fam, self._num_font_sty, self._num_auto,
                   self._num_fsize_pt, self._num_fsize3_pt, self._num_color,
                   self._num_pos_x, self._num_pos_y, self._num_tracking,
@@ -5593,7 +4860,7 @@ class GuideMarkWizard(tk.Toplevel):
             v.trace_add("write", lambda *_: self._schedule_tile_preview())
 
         for v in (self._num_range_str, self._paper, self._orient,
-                  self._margin, self._gap, self._dpi,
+                  self._margin, self._gap, self._dpi, self._k_pct,
                   self._num_tracking, self._num_kern_mode,
                   self._num3_tracking, self._num3_kern_mode,
                   self._cut_line_show, self._cut_line_pt):
@@ -5703,6 +4970,7 @@ class GuideMarkWizard(tk.Toplevel):
             "paper":         self._paper.get(),
             "orient":        self._orient.get(),
             "monochrome":    self._monochrome.get(),
+            "k_pct":         self._k_pct.get(),
             "num_font_fam":  self._num_font_fam.get(),
             "num_font_sty":  self._num_font_sty.get(),
             "num_auto":      self._num_auto.get(),
@@ -5719,6 +4987,10 @@ class GuideMarkWizard(tk.Toplevel):
             "num3_kern_mode":  self._num3_kern_mode.get(),
             "cut_line_show":   self._cut_line_show.get(),
             "cut_line_pt":   self._cut_line_pt.get(),
+            "svg_marks":     self._svg_marks.get(),
+            "svg_bleed":     self._svg_bleed.get(),
+            "svg_mark_len":  self._svg_mark_len.get(),
+            "svg_outline":   self._svg_outline.get(),
             "template_path": self._selected_tpl.get("path", ""),
             "template3_path": self._selected_tpl3.get("path", ""),
         }
@@ -5736,6 +5008,7 @@ class GuideMarkWizard(tk.Toplevel):
         _s(self._paper,         "paper")
         _s(self._orient,        "orient")
         _s(self._monochrome,    "monochrome")
+        _s(self._k_pct,          "k_pct")
         _s(self._num_font_fam,  "num_font_fam")
         _s(self._num_font_sty,  "num_font_sty")
         _s(self._num_auto,      "num_auto")
@@ -5752,6 +5025,10 @@ class GuideMarkWizard(tk.Toplevel):
         _s(self._num3_kern_mode, "num3_kern_mode")
         _s(self._cut_line_show,  "cut_line_show")
         _s(self._cut_line_pt,   "cut_line_pt")
+        _s(self._svg_marks,     "svg_marks")
+        _s(self._svg_bleed,     "svg_bleed")
+        _s(self._svg_mark_len,  "svg_mark_len")
+        _s(self._svg_outline,   "svg_outline")
         tp = d.get("template_path", "")
         if tp and os.path.isfile(tp):
             self._selected_tpl = {
@@ -5787,26 +5064,7 @@ class GuideMarkWizard(tk.Toplevel):
         else:
             self._presets.append(d)
         self._save_presets()
-        if hasattr(self, "_preset_cb"):
-            self._preset_cb["values"] = [p["name"] for p in self._presets]
         messagebox.showinfo("Preset", f'Preset "{name}" saved.', parent=self)
-
-    def _load_selected_preset(self):
-        name = self._preset_name.get().strip()
-        d = next((p for p in self._presets if p.get("name") == name), None)
-        if d:
-            self._apply_preset(d)
-        else:
-            messagebox.showwarning("Preset",
-                f'No preset named "{name}" found.', parent=self)
-
-    def _delete_preset(self):
-        name = self._preset_name.get().strip()
-        self._presets = [p for p in self._presets if p.get("name") != name]
-        self._save_presets()
-        self._preset_name.set("")
-        if hasattr(self, "_preset_cb"):
-            self._preset_cb["values"] = [p["name"] for p in self._presets]
 
     # ═════════════════════════════════════════════════════════════════════
     # Build
@@ -5816,26 +5074,10 @@ class GuideMarkWizard(tk.Toplevel):
         self.rowconfigure(1, weight=1)
 
         # ── Step nav bar ──────────────────────────────────────────────────
-        nav = tk.Frame(self, bg=BG2)
-        nav.grid(row=0, column=0, sticky="ew")
-        self._step_num_lbl: list = []
-        self._step_txt_lbl: list = []
-        for i, key in enumerate(("gmw.step_design",
-                                  "gmw.step_configure",
-                                  "gmw.step_print")):
-            cell = tk.Frame(nav, bg=BG2)
-            cell.pack(side="left", padx=20, pady=9)
-            nl = tk.Label(cell, text=f"  {i+1}  ", bg=BG2, fg=FG2,
-                          font=("Segoe UI", 9, "bold"))
-            nl.pack(side="left")
-            tl = tk.Label(cell, text=_t(key), bg=BG2, fg=FG2,
-                          font=("Segoe UI", 9))
-            tl.pack(side="left")
-            self._step_num_lbl.append(nl)
-            self._step_txt_lbl.append(tl)
-            if i < 2:
-                tk.Label(nav, text=" › ", bg=BG2, fg=FG2,
-                         font=("Segoe UI", 11)).pack(side="left")
+        self._step_bar = StepBar(self, [_t("gmw.step_design"),
+                                         _t("gmw.step_configure"),
+                                         _t("gmw.step_print")])
+        self._step_bar.grid(row=0, column=0, sticky="ew")
 
         # ── Content frames ────────────────────────────────────────────────
         content = tk.Frame(self, bg=BG)
@@ -5868,14 +5110,16 @@ class GuideMarkWizard(tk.Toplevel):
         bot = tk.Frame(self, bg=BG2)
         bot.grid(row=2, column=0, sticky="ew")
         bot.columnconfigure(1, weight=1)
-        self._btn_back = tk.Button(
-            bot, text="← " + _t("gmw.back"), bg=BG3, fg=FG,
-            relief="flat", font=FONT_SM, cursor="hand2",
-            padx=16, pady=8, command=self._go_back)
+        self._btn_back = btn(bot, "← " + _t("gmw.back"), self._go_back,
+                              primary=False)
         self._btn_back.grid(row=0, column=0, padx=12, pady=8)
+        # Plain tk.Button here, not ui_kit.btn(): its bg/text/state are
+        # driven directly by _show_step() (disabled + blank on the last
+        # step) which would fight btn()'s hover bindings (they always
+        # restore the colours captured at creation time).
         self._btn_next = tk.Button(
-            bot, text=_t("gmw.next") + " →", bg=ACCENT, fg="#ffffff",
-            relief="flat", font=("Segoe UI", 10, "bold"),
+            bot, text=_t("gmw.next") + " →", bg=ACCENT, fg=FG_ON_ACCENT,
+            relief="flat", font=FONT_BODY,
             cursor="hand2", padx=16, pady=8, command=self._go_next)
         self._btn_next.grid(row=0, column=2, padx=12, pady=8)
 
@@ -5887,9 +5131,8 @@ class GuideMarkWizard(tk.Toplevel):
         f.columnconfigure(0, weight=1)
         f.rowconfigure(1, weight=1)
 
-        tk.Label(f, text="Choose a preset", bg=BG, fg=FG,
-                 font=("Segoe UI", 14, "bold")).grid(
-                     row=0, column=0, pady=(28, 14))
+        tk.Label(f, text=_t("gmw.pick_design"), bg=BG, fg=FG,
+                 font=FONT_H2).grid(row=0, column=0, pady=(28, 14))
 
         # Horizontally scrollable card row
         outer = tk.Frame(f, bg=BG)
@@ -5898,7 +5141,7 @@ class GuideMarkWizard(tk.Toplevel):
         outer.columnconfigure(0, weight=1)
 
         cv = tk.Canvas(outer, bg=BG, highlightthickness=0)
-        sb = tk.Scrollbar(outer, orient="horizontal", command=cv.xview)
+        sb = scrollbar(outer, orient="horizontal", command=cv.xview)
         cv.configure(xscrollcommand=sb.set)
         sb.grid(row=1, column=0, sticky="ew")
         cv.grid(row=0, column=0, sticky="nsew")
@@ -5918,12 +5161,8 @@ class GuideMarkWizard(tk.Toplevel):
         for preset in self._presets:
             self._make_card(preset)
         # "+" new-preset card
-        add = tk.Frame(self._cards_inner, bg=BG3, cursor="hand2",
-                       highlightthickness=3, highlightbackground=BG3)
+        add, inner = card(self._cards_inner, selected=False, width=220, height=280)
         add.pack(side="left", padx=14, pady=14)
-        inner = tk.Frame(add, bg=BG3, width=170, height=220)
-        inner.pack_propagate(False)
-        inner.pack()
         plus_lbl = tk.Label(inner, text="+", bg=BG3, fg=FG2,
                              font=("Segoe UI", 52))
         plus_lbl.place(relx=0.5, rely=0.42, anchor="center")
@@ -5939,35 +5178,36 @@ class GuideMarkWizard(tk.Toplevel):
         name = preset.get("name", "Unnamed")
         selected = (name == self._preset_name.get())
 
-        card = tk.Frame(self._cards_inner, bg=BG3, cursor="hand2",
-                        highlightthickness=3,
-                        highlightbackground=ACCENT if selected else BG3)
-        card.pack(side="left", padx=14, pady=14)
+        card_outer, card_inner = card(self._cards_inner, selected=selected,
+                                      width=220, height=280)
+        card_outer.pack(side="left", padx=14, pady=14)
 
-        # Thumbnail canvas
-        tc = tk.Canvas(card, width=170, height=170, bg="#f0f0f0",
+        # Thumbnail canvas — sized generously so a non-square template
+        # (e.g. a 70x105mm card gabarit) still reads clearly instead of
+        # shrinking to a sliver inside a mostly-empty square.
+        TH = 220
+        tc = tk.Canvas(card_inner, width=TH, height=TH, bg=PREVIEW_BG,
                        highlightthickness=0)
         tc.pack(pady=(12, 0), padx=12)
         try:
-            img = _I.open(path).convert("RGB")
-            img.thumbnail((170, 170), _I.LANCZOS)
+            img = load_thumbnail(path, TH)
             w_, h_ = img.size
             thumb = _ITk.PhotoImage(img)
             self._thumb_cache[path] = thumb
-            tc.create_image((170 - w_) // 2, (170 - h_) // 2,
+            tc.create_image((TH - w_) // 2, (TH - h_) // 2,
                             anchor="nw", image=thumb)
         except Exception:
-            tc.create_text(85, 85, text="?", fill=FG2,
+            tc.create_text(TH // 2, TH // 2, text="?", fill=FG2,
                            font=("Segoe UI", 24))
 
         # Name
-        name_lbl = tk.Label(card, text=name, bg=BG3, fg=FG, font=FONT_SM,
+        name_lbl = tk.Label(card_inner, text=name, bg=BG3, fg=FG, font=FONT_SM,
                              wraplength=160, justify="center")
         name_lbl.pack(padx=10, pady=(6, 2))
 
         # Remove button
-        del_lbl = tk.Label(card, text="✕  remove", bg=BG3, fg=FG2,
-                           font=("Segoe UI", 7), cursor="hand2")
+        del_lbl = tk.Label(card_inner, text="✕  remove", bg=BG3, fg=FG3,
+                           font=FONT_HINT, cursor="hand2")
         del_lbl.pack(pady=(0, 8))
 
         def _select(p=preset):
@@ -5981,10 +5221,8 @@ class GuideMarkWizard(tk.Toplevel):
                 self._preset_name.set("")
                 self._selected_tpl = {}
             self._refresh_cards()
-            if hasattr(self, "_preset_cb"):
-                self._preset_cb["values"] = [p["name"] for p in self._presets]
 
-        for w in (card, tc, name_lbl):
+        for w in (card_outer, card_inner, tc, name_lbl):
             w.bind("<Button-1>", lambda e, fn=_select: fn())
         del_lbl.bind("<Button-1>", lambda e, fn=_remove: fn())
 
@@ -6000,7 +5238,7 @@ class GuideMarkWizard(tk.Toplevel):
         path = filedialog.askopenfilename(
             parent=self,
             title="Select template image",
-            filetypes=[("Images", "*.png *.jpg *.jpeg *.tif *.tiff *.bmp"),
+            filetypes=[("Images / vector", _TPL_PATTERNS),
                        ("All files", "*.*")])
         if not path:
             return
@@ -6016,27 +5254,26 @@ class GuideMarkWizard(tk.Toplevel):
             return
         path = self._selected_tpl.get("path", "")
         name = self._selected_tpl.get("name", "")
-        self._step1_tpl_lbl.configure(text=name if name else "— no template —")
+        self._step1_tpl_lbl.configure(text=name if name else _t("gmw.no_template"))
         self._step1_thumb_cv.delete("all")
         if path and os.path.isfile(path):
             try:
                 from PIL import Image as _I, ImageTk as _ITk
-                img = _I.open(path).convert("RGB")
-                img.thumbnail((50, 50), _I.LANCZOS)
+                img = load_thumbnail(path, 44)
                 w_, h_ = img.size
                 thumb = _ITk.PhotoImage(img)
                 self._step1_thumb_ref = thumb
                 self._step1_thumb_cv.create_image(
-                    (50 - w_) // 2, (50 - h_) // 2, anchor="nw", image=thumb)
+                    (44 - w_) // 2, (44 - h_) // 2, anchor="nw", image=thumb)
             except Exception:
-                self._step1_thumb_cv.create_text(25, 25, text="?", fill=FG2)
+                self._step1_thumb_cv.create_text(22, 22, text="?", fill=FG2)
 
     def _change_template3(self):
         """Pick a separate background image for 3-digit (100+) cards."""
         path = filedialog.askopenfilename(
             parent=self,
             title="Select template image (100+)",
-            filetypes=[("Images", "*.png *.jpg *.jpeg *.tif *.tiff *.bmp"),
+            filetypes=[("Images / vector", _TPL_PATTERNS),
                        ("All files", "*.*")])
         if not path:
             return
@@ -6059,20 +5296,19 @@ class GuideMarkWizard(tk.Toplevel):
         path = self._selected_tpl3.get("path", "")
         name = self._selected_tpl3.get("name", "")
         self._step1_tpl3_lbl.configure(
-            text=name if name else "— même template —")
+            text=name if name else _t("gmw.same_template"))
         self._step1_tpl3_thumb_cv.delete("all")
         if path and os.path.isfile(path):
             try:
                 from PIL import Image as _I, ImageTk as _ITk
-                img = _I.open(path).convert("RGB")
-                img.thumbnail((50, 50), _I.LANCZOS)
+                img = load_thumbnail(path, 44)
                 w_, h_ = img.size
                 thumb = _ITk.PhotoImage(img)
                 self._step1_tpl3_thumb_ref = thumb
                 self._step1_tpl3_thumb_cv.create_image(
-                    (50 - w_) // 2, (50 - h_) // 2, anchor="nw", image=thumb)
+                    (44 - w_) // 2, (44 - h_) // 2, anchor="nw", image=thumb)
             except Exception:
-                self._step1_tpl3_thumb_cv.create_text(25, 25, text="?",
+                self._step1_tpl3_thumb_cv.create_text(22, 22, text="?",
                                                        fill=FG2)
 
     # ── Step 1 : Configure ────────────────────────────────────────────────
@@ -6082,15 +5318,21 @@ class GuideMarkWizard(tk.Toplevel):
         f.columnconfigure(1, weight=1)
         f.rowconfigure(0, weight=1)
 
-        # Scrollable left panel
-        lp_outer = tk.Frame(f, bg=BG2, width=310)
+        # Scrollable left panel. Width is DPI-scaled (see app/ui_kit._dpi_scale)
+        # since it's a hand-tuned logical-pixel constant, same reasoning as
+        # the window geometry fixes done for every wizard's Toplevel — on a
+        # >100%-scaled display an unscaled fixed width renders visibly
+        # narrower than intended, clipping labels/values/units.
+        panel_w = round(380 * _dpi_scale(self))
+        lp_outer = tk.Frame(f, bg=BG2, width=panel_w)
         lp_outer.grid(row=0, column=0, sticky="nsew")
         lp_outer.grid_propagate(False)
         lp_outer.rowconfigure(0, weight=1)
         lp_outer.columnconfigure(0, weight=1)
-        _lp1_cv = tk.Canvas(lp_outer, bg=BG2, highlightthickness=0, width=294)
+        _lp1_cv = tk.Canvas(lp_outer, bg=BG2, highlightthickness=0,
+                            width=panel_w - 16)
         self._lp1_cv_ref = _lp1_cv
-        _lp1_sb = tk.Scrollbar(lp_outer, orient="vertical", command=_lp1_cv.yview)
+        _lp1_sb = scrollbar(lp_outer, orient="vertical", command=_lp1_cv.yview)
         _lp1_cv.configure(yscrollcommand=_lp1_sb.set)
         _lp1_sb.grid(row=0, column=1, sticky="ns")
         _lp1_cv.grid(row=0, column=0, sticky="nsew")
@@ -6108,18 +5350,12 @@ class GuideMarkWizard(tk.Toplevel):
             _w.bind("<MouseWheel>", _lp1_scroll)
 
         def sec(txt):
-            tk.Label(lp, text=txt, bg=BG2, fg=FG2,
-                     font=("Segoe UI", 8, "bold")).pack(
-                         anchor="w", padx=16, pady=(14, 3))
+            section_title(lp, txt).pack(anchor="w", padx=18, pady=(18, 6))
 
-        def row(lbl, fn, lw=14):
-            r = tk.Frame(lp, bg=BG2)
-            r.pack(fill="x", padx=16, pady=4)
-            if lbl:
-                tk.Label(r, text=lbl, bg=BG2, fg=FG, font=FONT_SM,
-                         width=lw, anchor="e").pack(side="left",
-                                                    padx=(0, 7))
-            fn(r)
+        def row(lbl, fn, lw=15):
+            r = grid_row(lp, lbl, fn, label_width=lw)
+            r.pack(fill="x", padx=18, pady=5)
+            return r
 
         def spin(p, var, lo, hi, inc=1, w=7, fmt=None):
             kw = {"format": fmt} if fmt else {}
@@ -6143,73 +5379,79 @@ class GuideMarkWizard(tk.Toplevel):
                             ref[0].configure(bg=c) if ref[0] else None))
                 except Exception:
                     pass
-            b = tk.Button(p, bg=var.get(), width=2, relief="flat",
-                          cursor="hand2", command=_pick)
-            b.pack(side="left", padx=(4, 0))
+            # Wider than a bare colour dot + a visible border, so it reads
+            # as "click me to change the colour" rather than a static swatch.
+            b = tk.Button(p, bg=var.get(), width=4, relief="flat",
+                          cursor="hand2", command=_pick,
+                          highlightbackground=BORDER, highlightthickness=1)
+            b.pack(side="left", padx=(6, 0))
             ref[0] = b
             var.trace_add("write", lambda *_: (
                 b.configure(bg=var.get()) if b.winfo_exists() else None))
 
-        # ── Template ──────────────────────────────────────────────────
-        sec("━  Template")
-        tpl_row = tk.Frame(lp, bg=BG2)
-        tpl_row.pack(fill="x", padx=16, pady=4)
-        self._step1_thumb_cv = tk.Canvas(tpl_row, width=50, height=50,
-                                          bg="#f0f0f0", highlightthickness=0)
-        self._step1_thumb_cv.pack(side="left")
-        self._step1_tpl_lbl = tk.Label(tpl_row, text="— no template —",
-                                        bg=BG2, fg=FG2, font=FONT_SM,
-                                        wraplength=130, justify="left")
-        self._step1_tpl_lbl.pack(side="left", padx=6)
-        tk.Button(tpl_row, text="Change…", bg=BG3, fg=FG, relief="flat",
-                  font=FONT_SM, cursor="hand2",
-                  command=self._change_template).pack(side="left")
-
-        # ── Preset ────────────────────────────────────────────────────
-        sec("━  Preset")
-        pr_row = tk.Frame(lp, bg=BG2)
-        pr_row.pack(fill="x", padx=16, pady=4)
-        self._preset_cb = ttk.Combobox(
-            pr_row, textvariable=self._preset_name,
-            values=[p["name"] for p in self._presets],
-            state="normal", width=13, style="Custom.TCombobox")
-        self._preset_cb.pack(side="left", fill="x", expand=True)
-        self._preset_cb.bind("<<ComboboxSelected>>",
-                              lambda e: self._load_selected_preset())
-        tk.Button(pr_row, text="Load", bg=BG3, fg=FG, relief="flat",
-                  font=FONT_SM, cursor="hand2",
-                  command=self._load_selected_preset).pack(
-                      side="left", padx=(4, 0))
-        tk.Button(pr_row, text="Save", bg=ACCENT, fg="#ffffff",
-                  relief="flat", font=FONT_SM, cursor="hand2",
-                  command=self._save_preset_as).pack(
-                      side="left", padx=(4, 0))
-        tk.Button(pr_row, text="✕", bg=BG3, fg=FG2, relief="flat",
-                  font=FONT_SM, cursor="hand2",
-                  command=self._delete_preset).pack(
-                      side="left", padx=(4, 0))
-
-        # ── Numbers ────────────────────────────────────────────────────
-        sec("━  " + _t("gmw.num_range"))
+        # ── Primary settings: Numbers + Number style ─────────────────────
+        # Most-used controls come first (range, auto-scale, size, colour,
+        # kerning, tracking) — template/preset management moves below,
+        # output/advanced move to the bottom, per the panel reorganisation.
+        sec(_t("gmw.num_range"))
         nr = tk.Frame(lp, bg=BG2)
-        nr.pack(fill="x", padx=16, pady=4)
+        nr.pack(fill="x", padx=18, pady=4)
         tk.Entry(nr, textvariable=self._num_range_str,
                  bg=BG3, fg=FG, insertbackground=FG, relief="flat",
-                 width=22, font=("Segoe UI", 11)).pack(
-                     side="left", fill="x", expand=True)
-        tk.Label(lp, text="ex: 1-15,  77,  100",
-                 bg=BG2, fg=FG2, font=("Segoe UI", 7)).pack(
-                     anchor="e", padx=18)
+                 font=("Segoe UI", 11)).pack(side="left", fill="x", expand=True)
+        tk.Label(lp, text="ex: 1-15, 77, 100 or 1-5, 1, 1, 55, 55",
+                 bg=BG2, fg=FG3, font=FONT_HINT).pack(anchor="w", padx=18, pady=(2, 0))
 
-        # ── Number style ───────────────────────────────────────────────
-        sec("━  Number")
+        sec(_t("gmw.sec_sheet"))
+        self._sheet_panel = SheetPanel(
+            lp,
+            make_range_items=self._make_range_items,
+            make_seed_item=self._make_seed_item,
+            families=sorted(_get_font_families().keys()),
+            render_preview=self._render_item_preview,
+            on_change=lambda: self._schedule_layout_preview(100))
+        self._sheet_panel.pack(fill="x", padx=18, pady=(0, 4))
+
+        sec(_t("gmw.sec_number"))
 
         def _nfont(p):
-            tk.Label(p, textvariable=self._num_font_display, bg=BG3, fg=FG,
-                     font=FONT_SM, anchor="w", width=22, relief="flat",
-                     padx=4).pack(side="left", fill="x", expand=True)
-            btn(p, "Font…", self._open_gmw_font,
-                primary=False).pack(side="left", padx=(4, 0))
+            all_fonts = sorted(_get_installed_fonts().keys())
+            cb = ttk.Combobox(p, textvariable=self._num_font_display,
+                              values=all_fonts, state="normal",
+                              style="Custom.TCombobox", font=FONT_SM)
+            cb.pack(side="left", fill="x", expand=True)
+
+            def _on_font_select(e=None):
+                flat = self._num_font_display.get()
+                fams = _get_font_families()
+                found = False
+                for fam, styles in fams.items():
+                    for sty in styles:
+                        key = fam if sty in ('Regular', '') else f"{fam} {sty}"
+                        if key == flat:
+                            self._num_font_fam.set(fam)
+                            self._num_font_sty.set(sty)
+                            found = True
+                            break
+                    if found:
+                        break
+                if not found and flat in fams:
+                    self._num_font_fam.set(flat)
+                    self._num_font_sty.set("Regular")
+
+            cb.bind("<<ComboboxSelected>>", _on_font_select)
+            cb.bind("<Return>", _on_font_select)
+            cb.bind("<FocusOut>", _on_font_select)
+
+            def _filter_fonts(*_):
+                q = self._num_font_display.get().lower()
+                filtered = [n for n in all_fonts if q in n.lower()]
+                cb["values"] = filtered if filtered else all_fonts
+            cb.bind("<KeyRelease>", _filter_fonts)
+
+            tk.Button(p, text="🔍", bg=BG3, fg=FG, relief="flat",
+                      font=FONT_SM, cursor="hand2", width=3,
+                      command=self._open_gmw_font).pack(side="left", padx=(4, 0))
         row(_t("gmw.num_font"), _nfont)
 
         def _nauto(p):
@@ -6226,8 +5468,8 @@ class GuideMarkWizard(tk.Toplevel):
                 width=6, bg=BG3, fg=FG, insertbackground=FG,
                 relief="flat", buttonbackground=BG3, state="disabled")
             self._num_fsize_spin.pack(side="left")
-            tk.Label(p, text="pt  (1-2 digit)", bg=BG2, fg=FG2,
-                     font=FONT_SM).pack(side="left", padx=2)
+            tk.Label(p, text="pt (1-2 digit)", bg=BG2, fg=FG2,
+                     font=FONT_SM).pack(side="left", padx=(6, 0))
         row(_t("gmw.num_fsize"), _nfsize)
 
         def _ncol(p):
@@ -6241,7 +5483,7 @@ class GuideMarkWizard(tk.Toplevel):
                               state="readonly", width=16,
                               style="Custom.TCombobox", font=FONT_SM)
             cb.pack(side="left")
-        row("ケカニング :", _nkern)
+        row(_t("gmw.kerning"), _nkern)
 
         def _ntrack(p):
             sp = tk.Spinbox(p, textvariable=self._num_tracking, from_=-200, to=200,
@@ -6250,39 +5492,39 @@ class GuideMarkWizard(tk.Toplevel):
                             buttonbackground=BG3)
             sp.pack(side="left")
             tk.Label(p, text="px", bg=BG2, fg=FG2,
-                     font=FONT_SM).pack(side="left", padx=(4, 0))
+                     font=FONT_SM).pack(side="left", padx=(6, 0))
         row(_t("gmw.sub_tracking"), _ntrack)
 
         # ── Card size ──────────────────────────────────────────────────
-        sec("━  Card size")
+        sec(_t("gmw.sec_card_size"))
         def _tsize(p):
             spin(p, self._tile_w, 1, 500, inc=0.5, w=7, fmt="%.1f")
             tk.Label(p, text="×", bg=BG2, fg=FG2,
-                     font=FONT_SM).pack(side="left", padx=4)
+                     font=FONT_SM).pack(side="left", padx=6)
             spin(p, self._tile_h, 1, 500, inc=0.5, w=7, fmt="%.1f")
             tk.Label(p, text="mm", bg=BG2, fg=FG2,
-                     font=FONT_SM).pack(side="left", padx=2)
-            tk.Label(p, textvariable=self._tile_px_str, bg=BG2, fg=FG2,
-                     font=("Segoe UI", 7)).pack(side="left", padx=(8, 0))
+                     font=FONT_SM).pack(side="left", padx=(6, 0))
+            tk.Label(p, textvariable=self._tile_px_str, bg=BG2, fg=FG3,
+                     font=FONT_HINT).pack(side="left", padx=(10, 0))
         row(_t("gmw.tile_size"), _tsize)
 
-        # ── Number position  ───────────────────────────────────────────
         # Lock checkbox: when on, font sizes scale proportionally on resize
         lock_row = tk.Frame(lp, bg=BG2)
-        lock_row.pack(fill="x", padx=16, pady=(2, 0))
-        tk.Checkbutton(lock_row, text="🔒  Lock number size & position ratio",
+        lock_row.pack(fill="x", padx=18, pady=(2, 4))
+        tk.Checkbutton(lock_row, text=_t("gmw.lock_ratio"),
                        variable=self._num_lock, bg=BG2, fg=FG2,
                        selectcolor=BG3, activebackground=BG2,
-                       font=("Segoe UI", 7)).pack(side="left")
+                       font=FONT_HINT).pack(side="left")
+
         def _pos_row(p, pct_var, pct_str, mm_str, mm_dim_var):
             sc = tk.Scale(p, variable=pct_var, from_=0, to=100,
                           orient="horizontal", bg=BG2, fg=FG, troughcolor=BG3,
-                          highlightthickness=0, showvalue=False, length=90)
-            sc.pack(side="left")
+                          highlightthickness=0, showvalue=False)
+            sc.pack(side="left", fill="x", expand=True)
             _arrow_scale(sc)
             tk.Label(p, textvariable=pct_str, bg=BG2, fg=FG2,
                      font=FONT_SM, width=4, anchor="w").pack(
-                         side="left", padx=(4, 0))
+                         side="left", padx=(6, 0))
             # mm entry (editable)
             mm_ent = tk.Entry(p, bg=BG3, fg=FG, insertbackground=FG,
                               relief="flat", width=6, justify="right")
@@ -6310,43 +5552,86 @@ class GuideMarkWizard(tk.Toplevel):
             mm_ent.bind("<Return>",   _apply)
             mm_ent.bind("<FocusOut>", _apply)
 
-        row("Position X",
+        row(_t("gmw.pos_x"),
             lambda p: _pos_row(p, self._num_pos_x, self._pos_x_pct_str,
                                self._pos_x_mm_str, self._tile_w))
-        row("Position Y",
+        row(_t("gmw.pos_y"),
             lambda p: _pos_row(p, self._num_pos_y, self._pos_y_pct_str,
                                self._pos_y_mm_str, self._tile_h))
 
-        # ── 3-digit (100+) independent settings ───────────────────────
-        sec("━  3 chiffres (100+)")
+        # ── Template + Preset: compact secondary cards ────────────────
+        sec(_t("gmw.sec_template"))
+        tpl_card = tk.Frame(lp, bg=BG3, highlightbackground=BORDER,
+                            highlightthickness=1)
+        tpl_card.pack(fill="x", padx=18, pady=(2, 4))
+        tpl_row = tk.Frame(tpl_card, bg=BG3)
+        tpl_row.pack(fill="x", padx=10, pady=10)
+        self._step1_thumb_cv = tk.Canvas(tpl_row, width=44, height=44,
+                                          bg=PREVIEW_BG, highlightthickness=0)
+        self._step1_thumb_cv.pack(side="left")
+        self._step1_tpl_lbl = tk.Label(tpl_row, text=_t("gmw.no_template"),
+                                        bg=BG3, fg=FG, font=FONT_SM,
+                                        anchor="w", justify="left")
+        self._step1_tpl_lbl.pack(side="left", fill="x", expand=True, padx=10)
+        tk.Button(tpl_row, text=_t("gmw.change"), bg=BG2, fg=FG, relief="flat",
+                  font=FONT_SM, cursor="hand2", padx=10,
+                  highlightbackground=BORDER, highlightthickness=1,
+                  command=self._change_template).pack(side="left")
 
-        # Template override for 100+ cards
-        tpl3_row = tk.Frame(lp, bg=BG2)
-        tpl3_row.pack(fill="x", padx=16, pady=4)
-        self._step1_tpl3_thumb_cv = tk.Canvas(tpl3_row, width=50, height=50,
-                                               bg="#f0f0f0",
+        sec(_t("gmw.sec_preset"))
+        pr_row = tk.Frame(lp, bg=BG2)
+        pr_row.pack(fill="x", padx=18, pady=4)
+        tk.Entry(pr_row, textvariable=self._preset_name, bg=BG3, fg=FG,
+                 insertbackground=FG, relief="flat", font=FONT_SM
+                 ).pack(side="left", fill="x", expand=True, ipady=3)
+        btn(pr_row, _t("gmw.save_preset"), self._save_preset_as,
+            primary=True).pack(side="left", padx=(6, 0))
+        change_lbl = tk.Label(lp, text=_t("gmw.change_preset"), bg=BG2, fg=ACCENT,
+                              font=FONT_HINT, cursor="hand2")
+        change_lbl.pack(anchor="w", padx=18, pady=(2, 4))
+        change_lbl.bind("<Button-1>", lambda e: self._show_step(0))
+
+        # ── 3-digit (100+) independent settings: secondary card ────────
+        sec(_t("gmw.sec_3digit"))
+        tpl3_card = tk.Frame(lp, bg=BG3, highlightbackground=BORDER,
+                             highlightthickness=1)
+        tpl3_card.pack(fill="x", padx=18, pady=(2, 8))
+
+        tpl3_row = tk.Frame(tpl3_card, bg=BG3)
+        tpl3_row.pack(fill="x", padx=10, pady=10)
+        self._step1_tpl3_thumb_cv = tk.Canvas(tpl3_row, width=44, height=44,
+                                               bg=PREVIEW_BG,
                                                highlightthickness=0)
         self._step1_tpl3_thumb_cv.pack(side="left")
-        self._step1_tpl3_lbl = tk.Label(tpl3_row, text="— même template —",
-                                         bg=BG2, fg=FG2, font=FONT_SM,
-                                         wraplength=110, justify="left")
-        self._step1_tpl3_lbl.pack(side="left", padx=6)
-        tk.Button(tpl3_row, text="Change…", bg=BG3, fg=FG, relief="flat",
-                  font=FONT_SM, cursor="hand2",
+        self._step1_tpl3_lbl = tk.Label(tpl3_row, text=_t("gmw.same_template"),
+                                         bg=BG3, fg=FG, font=FONT_SM,
+                                         anchor="w", justify="left")
+        self._step1_tpl3_lbl.pack(side="left", fill="x", expand=True, padx=10)
+        tk.Button(tpl3_row, text=_t("gmw.change"), bg=BG2, fg=FG, relief="flat",
+                  font=FONT_SM, cursor="hand2", padx=10,
+                  highlightbackground=BORDER, highlightthickness=1,
                   command=self._change_template3).pack(side="left")
-        tk.Button(tpl3_row, text="✕", bg=BG3, fg=FG2, relief="flat",
-                  font=FONT_SM, cursor="hand2",
+        tk.Button(tpl3_row, text="✕", bg=BG2, fg=FG_RED, relief="flat",
+                  font=FONT_SM, cursor="hand2", width=3,
+                  highlightbackground=BORDER, highlightthickness=1,
                   command=self._clear_template3).pack(side="left", padx=(4, 0))
+
+        tpl3_settings = tk.Frame(tpl3_card, bg=BG3)
+        tpl3_settings.pack(fill="x", padx=10, pady=(0, 10))
+
+        def row3(lbl, fn, lw=15):
+            grid_row(tpl3_settings, lbl, fn, bg=BG3, label_width=lw).pack(
+                fill="x", pady=3)
 
         def _nfsize3b(p):
             self._num_fsize3_spin = tk.Spinbox(
                 p, textvariable=self._num_fsize3_pt, from_=4, to=999,
-                width=6, bg=BG3, fg=FG, insertbackground=FG,
-                relief="flat", buttonbackground=BG3, state="disabled")
+                width=6, bg=BG2, fg=FG, insertbackground=FG,
+                relief="flat", buttonbackground=BG2, state="disabled")
             self._num_fsize3_spin.pack(side="left")
-            tk.Label(p, text="pt", bg=BG2, fg=FG2,
-                     font=FONT_SM).pack(side="left", padx=2)
-        row(_t("gmw.num_fsize"), _nfsize3b)
+            tk.Label(p, text="pt", bg=BG3, fg=FG2,
+                     font=FONT_SM).pack(side="left", padx=(6, 0))
+        row3(_t("gmw.num_fsize"), _nfsize3b)
 
         def _nkern3(p):
             cb = ttk.Combobox(p, textvariable=self._num3_kern_mode,
@@ -6354,53 +5639,44 @@ class GuideMarkWizard(tk.Toplevel):
                               state="readonly", width=16,
                               style="Custom.TCombobox", font=FONT_SM)
             cb.pack(side="left")
-        row("ケカニング :", _nkern3)
+        row3(_t("gmw.kerning"), _nkern3)
 
         def _ntrack3(p):
             sp = tk.Spinbox(p, textvariable=self._num3_tracking, from_=-200, to=200,
-                            increment=1, width=7, bg=BG3, fg=FG,
+                            increment=1, width=7, bg=BG2, fg=FG,
                             insertbackground=FG, relief="flat",
-                            buttonbackground=BG3)
+                            buttonbackground=BG2)
             sp.pack(side="left")
-            tk.Label(p, text="px", bg=BG2, fg=FG2,
-                     font=FONT_SM).pack(side="left", padx=(4, 0))
-        row(_t("gmw.sub_tracking"), _ntrack3)
+            tk.Label(p, text="px", bg=BG3, fg=FG2,
+                     font=FONT_SM).pack(side="left", padx=(6, 0))
+        row3(_t("gmw.sub_tracking"), _ntrack3)
 
-        row("Position X",
-            lambda p: _pos_row(p, self._num3_pos_x, self._pos3_x_pct_str,
-                               self._pos3_x_mm_str, self._tile_w))
-        row("Position Y",
-            lambda p: _pos_row(p, self._num3_pos_y, self._pos3_y_pct_str,
-                               self._pos3_y_mm_str, self._tile_h))
+        row3(_t("gmw.pos_x"),
+             lambda p: _pos_row(p, self._num3_pos_x, self._pos3_x_pct_str,
+                                self._pos3_x_mm_str, self._tile_w))
+        row3(_t("gmw.pos_y"),
+             lambda p: _pos_row(p, self._num3_pos_y, self._pos3_y_pct_str,
+                                self._pos3_y_mm_str, self._tile_h))
 
-        # ── Output options ─────────────────────────────────────────────
-        sec("━  Output")
+        # ── Output ───────────────────────────────────────────────────────
+        sec(_t("gmw.sec_output"))
         mn_row = tk.Frame(lp, bg=BG2)
-        mn_row.pack(fill="x", padx=16, pady=4)
+        mn_row.pack(fill="x", padx=18, pady=4)
         tk.Checkbutton(mn_row, text=_t("gmw.monochrome"),
                        variable=self._monochrome, bg=BG2, fg=FG,
                        selectcolor=BG3, activebackground=BG2,
                        font=FONT_SM).pack(side="left")
 
-        # ── Advanced (collapsible) ─────────────────────────────────────
-        tk.Frame(lp, bg=BG3, height=1).pack(fill="x", padx=16, pady=(14, 0))
-        self._adv_open = False
-        self._adv_btn = tk.Button(
-            lp, text="▸  " + _t("gmw.advanced"),
-            bg=BG2, fg=FG2, relief="flat",
-            font=("Segoe UI", 8, "bold"), cursor="hand2", anchor="w",
-            command=self._toggle_adv)
-        self._adv_btn.pack(fill="x", padx=14, pady=4)
-        self._adv_frame = tk.Frame(lp, bg=BG2)
+        # ── Advanced (collapsible, closed by default) ──────────────────
+        separator(lp).pack(fill="x", padx=18, pady=(14, 0))
+        adv_header, adv_content, _adv_toggle = collapsible_section(
+            lp, _t("gmw.advanced"), bg=BG2, start_open=False)
+        adv_header.pack(fill="x", padx=16, pady=6)
+        adv_content.pack(fill="x")
 
-        def adv_row(lbl, fn, lw=14):
-            r = tk.Frame(self._adv_frame, bg=BG2)
-            r.pack(fill="x", padx=16, pady=3)
-            if lbl:
-                tk.Label(r, text=lbl, bg=BG2, fg=FG, font=FONT_SM,
-                         width=lw, anchor="e").pack(side="left",
-                                                    padx=(0, 7))
-            fn(r)
+        def adv_row(lbl, fn, lw=15):
+            grid_row(adv_content, lbl, fn, label_width=lw).pack(
+                fill="x", padx=18, pady=4)
 
         adv_row(_t("gmw.dpi"),
                 lambda p: spin(p, self._dpi, 72, 600, w=6))
@@ -6432,17 +5708,21 @@ class GuideMarkWizard(tk.Toplevel):
         f.columnconfigure(1, weight=1)
         f.rowconfigure(0, weight=1)
 
-        # Scrollable left panel so all controls are reachable at any height
-        lp_outer = tk.Frame(f, bg=BG2, width=260)
+        # Scrollable left panel so all controls are reachable at any height.
+        # Width is DPI-scaled (see app/ui_kit._dpi_scale) — same reasoning
+        # as Step 1's panel: an unscaled fixed width renders too narrow on a
+        # >100%-scaled display, clipping labels/values/units.
+        panel_w = round(340 * _dpi_scale(self))
+        lp_outer = tk.Frame(f, bg=BG2, width=panel_w)
         lp_outer.grid(row=0, column=0, sticky="nsew")
         lp_outer.grid_propagate(False)
         lp_outer.rowconfigure(0, weight=1)
         lp_outer.columnconfigure(0, weight=1)
         _lp_cv = tk.Canvas(lp_outer, bg=BG2, highlightthickness=0,
-                            width=244)
+                            width=panel_w - 16)
         self._lp_cv_ref = _lp_cv
-        _lp_sb = tk.Scrollbar(lp_outer, orient="vertical",
-                               command=_lp_cv.yview)
+        _lp_sb = scrollbar(lp_outer, orient="vertical",
+                            command=_lp_cv.yview)
         _lp_cv.configure(yscrollcommand=_lp_sb.set)
         _lp_sb.grid(row=0, column=1, sticky="ns")
         _lp_cv.grid(row=0, column=0, sticky="nsew")
@@ -6459,21 +5739,13 @@ class GuideMarkWizard(tk.Toplevel):
         for _w in (_lp_cv, lp):
             _w.bind("<MouseWheel>", _lp_scroll)
 
-        P = {"padx": 14, "pady": 4}
+        P = {"padx": 16, "pady": 5}
 
         def sec(txt):
-            tk.Label(lp, text=txt, bg=BG2, fg=FG2,
-                     font=("Segoe UI", 8, "bold")).pack(
-                         anchor="w", padx=14, pady=(12, 3))
+            section_title(lp, txt).pack(anchor="w", padx=16, pady=(16, 5))
 
-        def row(lbl, fn, lw=13):
-            r = tk.Frame(lp, bg=BG2)
-            r.pack(fill="x", **P)
-            if lbl:
-                tk.Label(r, text=lbl, bg=BG2, fg=FG, font=FONT_SM,
-                         width=lw, anchor="e").pack(side="left",
-                                                    padx=(0, 6))
-            fn(r)
+        def row(lbl, fn, lw=14):
+            grid_row(lp, lbl, fn, label_width=lw).pack(fill="x", **P)
 
         def spin(p, var, lo, hi, inc=1, w=7, fmt=None):
             kw = {"format": fmt} if fmt else {}
@@ -6482,9 +5754,9 @@ class GuideMarkWizard(tk.Toplevel):
                        relief="flat", buttonbackground=BG3,
                        **kw).pack(side="left")
 
-        sec("━  " + _t("gmw.paper"))
+        sec(_t("gmw.paper"))
         fmt_row = tk.Frame(lp, bg=BG2)
-        fmt_row.pack(fill="x", padx=14, pady=(2, 4))
+        fmt_row.pack(fill="x", padx=16, pady=(2, 4))
         for fk, fl in (
             (list(self.PAPER_MM)[0], "A3ノビ"),
             (list(self.PAPER_MM)[1], "A3"),
@@ -6499,8 +5771,8 @@ class GuideMarkWizard(tk.Toplevel):
                 activebackground=BG3, activeforeground=FG
             ).pack(side="left", padx=(0, 4))
         # mm dimension label — updates on paper/orient change
-        self._paper_mm_lbl = tk.Label(lp, bg=BG2, fg=FG2, font=("Segoe UI", 7))
-        self._paper_mm_lbl.pack(anchor="w", padx=14, pady=(0, 4))
+        self._paper_mm_lbl = tk.Label(lp, bg=BG2, fg=FG3, font=FONT_HINT)
+        self._paper_mm_lbl.pack(anchor="w", padx=16, pady=(0, 4))
         def _upd_mm_lbl(*_):
             if not self.winfo_exists(): return
             pw, ph = self.PAPER_MM.get(self._paper.get(), (0, 0))
@@ -6530,10 +5802,10 @@ class GuideMarkWizard(tk.Toplevel):
         row(_t("gmw.gap"),    lambda p: _mm(p, self._gap))
         row(_t("gmw.dpi"),    lambda p: spin(p, self._dpi, 72, 600, w=6))
 
-        sec("━  Cut lines")
+        sec(_t("gmw.sec_cut_lines"))
         cut_row = tk.Frame(lp, bg=BG2)
-        cut_row.pack(fill="x", padx=14, pady=4)
-        tk.Checkbutton(cut_row, text="Show", variable=self._cut_line_show,
+        cut_row.pack(fill="x", padx=16, pady=4)
+        tk.Checkbutton(cut_row, text=_t("gmw.cut_show"), variable=self._cut_line_show,
                        bg=BG2, fg=FG, selectcolor=BG3,
                        activebackground=BG2, font=FONT_SM,
                        command=lambda: self._schedule_layout_preview(100)
@@ -6546,33 +5818,33 @@ class GuideMarkWizard(tk.Toplevel):
                    command=lambda: self._schedule_layout_preview(100)
                    ).pack(side="left", padx=(8, 0))
         tk.Label(cut_row, text="pt", bg=BG2, fg=FG2,
-                 font=FONT_SM).pack(side="left", padx=2)
+                 font=FONT_SM).pack(side="left", padx=(6, 0))
 
-        sec("━  " + _t("gmw.out_folder"))
+        sec(_t("gmw.out_folder"))
 
         def _out_w(p):
             tk.Entry(p, textvariable=self._out_folder, bg=BG3, fg=FG,
-                     insertbackground=FG, relief="flat",
-                     width=12).pack(side="left", fill="x", expand=True)
+                     insertbackground=FG, relief="flat").pack(
+                         side="left", fill="x", expand=True)
             tk.Button(p, text="📂", bg=BG3, fg=FG, relief="flat",
                       cursor="hand2",
                       command=self._pick_out_folder).pack(side="left",
-                                                          padx=(4, 0))
+                                                          padx=(6, 0))
         row(_t("gmw.out_folder"), _out_w)
 
         def _name_w(p):
             tk.Entry(p, textvariable=self._export_name, bg=BG3, fg=FG,
-                     insertbackground=FG, relief="flat",
-                     width=14).pack(side="left", fill="x", expand=True)
-            tk.Label(p, text=".png / .pdf", bg=BG2, fg=FG2,
-                     font=("Segoe UI", 7)).pack(side="left", padx=(4, 0))
-        row("File name", _name_w)
+                     insertbackground=FG, relief="flat").pack(
+                         side="left", fill="x", expand=True)
+            tk.Label(p, text=".png / .pdf", bg=BG2, fg=FG3,
+                     font=FONT_HINT).pack(side="left", padx=(6, 0))
+        row(_t("gmw.file_name"), _name_w)
 
         def _pr_w(p):
             self._printer_cb = ttk.Combobox(
                 p, textvariable=self._printer, state="readonly",
-                width=14, style="Custom.TCombobox")
-            self._printer_cb.pack(side="left")
+                style="Custom.TCombobox")
+            self._printer_cb.pack(side="left", fill="x", expand=True)
         row(_t("gmw.printers"), _pr_w)
 
         mn = tk.Frame(lp, bg=BG2)
@@ -6582,16 +5854,36 @@ class GuideMarkWizard(tk.Toplevel):
                        selectcolor=BG3, activebackground=BG2,
                        font=FONT_SM).pack(side="left")
 
-        sec("━  Export / Print")
+        sec(_t("gmw.sec_svg"))
+        def _svg_marks_w(p):
+            for val, key in (("tombo", "gmw.svg_tombo"),
+                             ("rect", "gmw.svg_rect"),
+                             ("none", "gmw.svg_none")):
+                tk.Radiobutton(p, text=_t(key), variable=self._svg_marks,
+                               value=val, bg=BG2, fg=FG, selectcolor=BG3,
+                               activebackground=BG2,
+                               font=FONT_SM).pack(side="left", padx=3)
+        row(_t("gmw.svg_marks"), _svg_marks_w)
+        row(_t("gmw.svg_bleed"), lambda p: _mm(p, self._svg_bleed))
+        row(_t("gmw.svg_arm"),   lambda p: _mm(p, self._svg_mark_len))
+        ol = tk.Frame(lp, bg=BG2)
+        ol.pack(fill="x", **P)
+        tk.Checkbutton(ol, text=_t("gmw.svg_outline"),
+                       variable=self._svg_outline, bg=BG2, fg=FG,
+                       selectcolor=BG3, activebackground=BG2,
+                       font=FONT_SM).pack(side="left")
+
+        sec(_t("gmw.sec_export"))
         for txt, cmd in (
             (_t("gmw.export_png"), self._export_png),
             (_t("gmw.export_pdf"), self._export_pdf),
+            (_t("gmw.export_svg"), self._export_svg),
             (_t("gmw.print"),      self._print_layout),
         ):
-            tk.Button(lp, text=txt, bg=ACCENT, fg="#ffffff",
+            tk.Button(lp, text=txt, bg=ACCENT, fg=FG_ON_ACCENT,
                       relief="flat", font=FONT_SM, cursor="hand2",
                       padx=10, pady=7, anchor="w",
-                      command=cmd).pack(fill="x", padx=14, pady=3)
+                      command=cmd).pack(fill="x", padx=16, pady=4)
 
         # Right panel : layout preview
         rp = tk.Frame(f, bg=BG)
@@ -6628,13 +5920,7 @@ class GuideMarkWizard(tk.Toplevel):
         for i, f in enumerate(self._frames):
             if i == n:
                 f.tkraise()
-        for i, (nl, tl) in enumerate(
-                zip(self._step_num_lbl, self._step_txt_lbl)):
-            active = (i == n)
-            nl.configure(fg=ACCENT if active else FG2)
-            tl.configure(fg=FG if active else FG2,
-                         font=("Segoe UI", 9,
-                               "bold" if active else "normal"))
+        self._step_bar.set_step(n)
         self._btn_back.configure(
             state="normal" if n > 0 else "disabled")
         if n < 2:
@@ -6707,15 +5993,6 @@ class GuideMarkWizard(tk.Toplevel):
             self._num_fsize3_spin.configure(state=st)
         self._schedule_tile_preview()
 
-    def _toggle_adv(self):
-        self._adv_open = not self._adv_open
-        if self._adv_open:
-            self._adv_frame.pack(fill="x")
-            self._adv_btn.configure(text="▾  " + _t("gmw.advanced"))
-        else:
-            self._adv_frame.pack_forget()
-            self._adv_btn.configure(text="▸  " + _t("gmw.advanced"))
-
     # ═════════════════════════════════════════════════════════════════════
     # Pickers / printers
     # ═════════════════════════════════════════════════════════════════════
@@ -6787,142 +6064,66 @@ class GuideMarkWizard(tk.Toplevel):
         key = f"{family} {style}".strip()
         return _INSTALLED_FONTS.get(key) or _INSTALLED_FONTS.get(family, "")
 
-    @staticmethod
-    def _pt2px(pt: float, dpi: int) -> int:
-        return max(1, round(pt * dpi / 72))
+    def _apply_k_convert(self, img):
+        """Convert img to monochrome at the selected K% density."""
+        return apply_k_convert(img, self._k_pct.get())
 
-    def _auto_num_size(self, text: str, tw: int, th: int,
-                       fp: str, dpi: int) -> int:
-        """Binary-search: largest pt where `text` fits in ~70% W / 50% H."""
-        from PIL import ImageDraw as _D, ImageFont as _F, Image as _I
-        max_w = int(tw * 0.72)
-        max_h = int(th * 0.50)
-        # for 3+ digit numbers, honour the manual cap as an upper bound
-        cap = (self._num_fsize3_pt.get()
-               if len(text) >= 3 else 400)
-        dummy = _D.Draw(_I.new("RGB", (1, 1)))
-
-        def fits(pt: int) -> bool:
-            px = max(1, round(pt * dpi / 72))
-            try:
-                f = _F.truetype(fp, px) if fp else _F.load_default()
-            except Exception:
-                f = _F.load_default()
-            bb = dummy.textbbox((0, 0), text, font=f)
-            return (bb[2] - bb[0]) <= max_w and (bb[3] - bb[1]) <= max_h
-
-        lo, hi, best = 4, cap, 8
-        while lo <= hi:
-            mid = (lo + hi) // 2
-            if fits(mid):
-                best = mid
-                lo = mid + 1
-            else:
-                hi = mid - 1
-        return best
-
-    # ═════════════════════════════════════════════════════════════════════
-    # Tile renderer  — template image + number overlay
-    # ═════════════════════════════════════════════════════════════════════
     def _render_tile(self, n: int, tw: int, th: int, dpi: int):
-        from PIL import Image as _I, ImageDraw as _D, ImageFont as _F
+        return render_item(SheetItem(self._design(), [Segment(str(n))]),
+                           tw, th, dpi, self._font_path)
 
-        s    = str(n)
-        is3  = len(s) >= 3
+    # ── Mixed sheet (several designs / composite labels on one sheet) ────
+    def _design_name(self) -> str:
+        return (self._preset_name.get().strip()
+                or self._selected_tpl.get("name", "") or "design")
 
-        path = (self._selected_tpl.get("path", "")
-                if self._selected_tpl else "")
-        # 3-digit cards can have their own background override
-        if is3 and self._selected_tpl3:
-            path3 = self._selected_tpl3.get("path", "")
-            if path3 and os.path.isfile(path3):
-                path = path3
-        if path and os.path.isfile(path):
-            tile = _I.open(path).convert("RGB").resize((tw, th), _I.LANCZOS)
-        else:
-            tile = _I.new("RGB", (tw, th), "#ffffff")
+    def _make_range_items(self) -> list:
+        """One sheet item per number of the Numbers field, current design."""
+        design, name = self._design(), self._design_name()
+        return [SheetItem(design, [Segment(str(n))], name)
+                for n in self._parse_range()]
 
-        draw = _D.Draw(tile)
-        fp   = self._font_path(self._num_font_fam.get(),
-                               self._num_font_sty.get())
-        s    = str(n)
-        is3  = len(s) >= 3
+    def _make_seed_item(self) -> SheetItem:
+        """Starting point for the composite editor: 'N' + small '-1'."""
+        sub_pt = max(4, round(self._num_fsize_pt.get() * 0.4))
+        return SheetItem(self._design(),
+                         [Segment(str(self._parse_range()[0])),
+                          Segment("-1", pt=sub_pt)],
+                         self._design_name())
 
-        if self._num_auto.get():
-            num_pt = self._auto_num_size(s, tw, th, fp, dpi)
-        else:
-            num_pt = (self._num_fsize3_pt.get()
-                      if is3 else self._num_fsize_pt.get())
-
-        px = self._pt2px(num_pt, dpi)
-        try:
-            nf = _F.truetype(fp, px) if fp else _F.load_default()
-        except Exception:
-            nf = _F.load_default()
-
-        col      = self._num_color.get() or "#000000"
-        col_rgba = tuple(int(col.lstrip("#")[i:i+2], 16) for i in (0, 2, 4)) + (255,)
-
-        # Pick 1-2 digit vs 3+ digit independent settings
-        if is3:
-            cx        = int(tw * self._num3_pos_x.get() / 100)
-            cy        = int(th * self._num3_pos_y.get() / 100)
-            tracking  = self._num3_tracking.get()
-            kern_mode = self._num3_kern_mode.get()
-        else:
-            cx        = int(tw * self._num_pos_x.get() / 100)
-            cy        = int(th * self._num_pos_y.get() / 100)
-            tracking  = self._num_tracking.get()
-            kern_mode = self._num_kern_mode.get()
-
-        if kern_mode == "等幅":
-            try:
-                slot_w = int(max(nf.getlength(ch) for ch in "0123456789"))
-            except AttributeError:
-                slot_w = int(max((draw.textbbox((0,0),ch,font=nf)[2]-draw.textbbox((0,0),ch,font=nf)[0]) for ch in "0123456789"))
-            slot_w = max(1, slot_w + tracking)
-            total_w = slot_w * len(s)
-            x = cx - total_w // 2
-            for ch in s:
-                try:
-                    ch_w = int(nf.getlength(ch))
-                except AttributeError:
-                    bb_ = draw.textbbox((0, 0), ch, font=nf)
-                    ch_w = bb_[2] - bb_[0]
-                draw.text((x + (slot_w - ch_w) // 2, cy), ch,
-                          fill=col_rgba, font=nf, anchor="lm")
-                x += slot_w
-        elif kern_mode == "オプティカル":
-            _draw_optical(draw, s, nf, cx, cy, col_rgba, tracking)
-        elif tracking != 0:
-            _draw_tracked(draw, s, nf, cx, cy, col_rgba, tracking)
-        else:
-            bb  = draw.textbbox((0, 0), s, font=nf)
-            nx  = cx - (bb[2] - bb[0]) // 2 - bb[0]
-            ny  = cy - (bb[3] - bb[1]) // 2 - bb[1]
-            draw.text((nx, ny), s, font=nf, fill=col)
+    def _render_item_preview(self, item: SheetItem):
+        tw = max(10, round(self._tile_w.get() / 25.4 * 150))
+        th = max(10, round(self._tile_h.get() / 25.4 * 150))
+        tile = render_item(item, tw, th, 150, self._font_path)
+        if self._monochrome.get():
+            tile = apply_k_convert(tile, self._k_pct.get())
         return tile
 
     # ═════════════════════════════════════════════════════════════════════
-    # Number range parsing  — "1-15, 77, 100"
+    # Number range parsing  — "1-15, 77, 100"  or  "1-5, 1, 1, 55, 55"
+    # Numbers are kept IN ORDER and duplicates are allowed (same tile can
+    # appear multiple times in the print layout).
     # ═════════════════════════════════════════════════════════════════════
     def _parse_range(self) -> list:
-        result: set = set()
-        for part in self._num_range_str.get().split(","):
+        result: list = []
+        for part in self._num_range_str.get().replace(";", ",").split(","):
             part = part.strip()
-            if "-" in part:
+            if not part:
+                continue
+            if "-" in part and not part.lstrip().startswith("-"):
                 try:
                     a, b = part.split("-", 1)
-                    result.update(range(int(a.strip()),
-                                        int(b.strip()) + 1))
+                    a, b = int(a.strip()), int(b.strip())
+                    result.extend(range(a, b + 1) if a <= b
+                                  else range(a, b - 1, -1))
                 except ValueError:
                     pass
-            elif part:
+            else:
                 try:
-                    result.add(int(part))
+                    result.append(int(part))
                 except ValueError:
                     pass
-        return sorted(result) or [1]
+        return result or [1]
 
     # ═════════════════════════════════════════════════════════════════════
     # Preview
@@ -6945,7 +6146,7 @@ class GuideMarkWizard(tk.Toplevel):
         th = max(10, round(self._tile_h.get() / 25.4 * 150))
         tile = self._render_tile(n, tw, th, 150)
         if self._monochrome.get():
-            tile = tile.convert("L").convert("RGB")
+            tile = self._apply_k_convert(tile)
         scale = min(cw / tw, ch / th, 1.0)
         nw, nh = max(1, int(tw * scale)), max(1, int(th * scale))
         from PIL import ImageTk as _ITk
@@ -6984,45 +6185,44 @@ class GuideMarkWizard(tk.Toplevel):
     # ═════════════════════════════════════════════════════════════════════
     # Layout engine
     # ═════════════════════════════════════════════════════════════════════
+    def _design(self) -> Design:
+        """Current wizard settings as an engine Design."""
+        return Design(
+            template_path=self._selected_tpl.get("path", "")
+            if self._selected_tpl else "",
+            template3_path=self._selected_tpl3.get("path", "")
+            if self._selected_tpl3 else "",
+            font_family=self._num_font_fam.get(),
+            font_style=self._num_font_sty.get(),
+            auto_size=self._num_auto.get(),
+            fsize_pt=self._num_fsize_pt.get(),
+            fsize3_pt=self._num_fsize3_pt.get(),
+            color=self._num_color.get(),
+            pos_x=self._num_pos_x.get(), pos_y=self._num_pos_y.get(),
+            tracking=self._num_tracking.get(),
+            kern_mode=self._num_kern_mode.get(),
+            pos3_x=self._num3_pos_x.get(), pos3_y=self._num3_pos_y.get(),
+            tracking3=self._num3_tracking.get(),
+            kern3_mode=self._num3_kern_mode.get())
+
+    def _sheet_items(self) -> list:
+        """Tiles to print: the mixed sheet if any, else the Numbers field."""
+        panel = getattr(self, "_sheet_panel", None)
+        if panel is not None and panel.items:
+            return list(panel.items)
+        return [SheetItem(self._design(), [Segment(str(n))])
+                for n in self._parse_range()]
+
     def _generate_layout(self, dpi_override=None) -> list:
-        from PIL import Image as _I, ImageDraw as _D
         dpi = dpi_override or max(72, self._dpi.get())
-        pw_mm, ph_mm = self.PAPER_MM[self._paper.get()]
-        if self._orient.get() == "portrait":
-            pw_mm, ph_mm = min(pw_mm, ph_mm), max(pw_mm, ph_mm)
-        else:
-            pw_mm, ph_mm = max(pw_mm, ph_mm), min(pw_mm, ph_mm)
-
-        def mm2px(mm): return round(mm / 25.4 * dpi)
-
-        PW, PH = mm2px(pw_mm), mm2px(ph_mm)
-        gap    = mm2px(self._gap.get())
-        tw     = mm2px(self._tile_w.get())
-        th     = mm2px(self._tile_h.get())
-        if tw <= 0 or th <= 0:
-            return [_I.new("RGB", (max(1, PW), max(1, PH)), "white")]
-
-        # Always compute cols/rows at the same fixed DPI (72) used by the
-        # visible preview so that export and preview always show the same grid.
-        def mm2px72(mm): return round(mm / 25.4 * 72)
-        cols = max(1, (mm2px72(pw_mm) - 2*mm2px72(self._margin.get())
-                       + mm2px72(self._gap.get()))
-                      // (mm2px72(self._tile_w.get()) + mm2px72(self._gap.get())))
-        rows = max(1, (mm2px72(ph_mm) - 2*mm2px72(self._margin.get())
-                       + mm2px72(self._gap.get()))
-                      // (mm2px72(self._tile_h.get()) + mm2px72(self._gap.get())))
-        per_page = cols * rows
-        nums     = self._parse_range()
-        self._last_total  = len(nums)
-        self._last_placed = len(nums)
-        self._last_cols   = cols
-        self._last_rows   = rows
-
-        # Centre the tile grid on the page
-        grid_w = cols * tw + (cols - 1) * gap
-        grid_h = rows * th + (rows - 1) * gap
-        off_x  = (PW - grid_w) // 2
-        off_y  = (PH - grid_h) // 2
+        grid = make_grid(self._paper.get(), self._orient.get(),
+                         self._tile_w.get(), self._tile_h.get(),
+                         self._margin.get(), self._gap.get())
+        items = self._sheet_items()
+        self._last_total  = len(items)
+        self._last_placed = len(items)
+        self._last_cols   = grid.cols
+        self._last_rows   = grid.rows
 
         cut_lw = 0
         if self._cut_line_show.get():
@@ -7032,34 +6232,22 @@ class GuideMarkWizard(tk.Toplevel):
                 # width so Show/Hide and thickness are clearly perceivable.
                 cut_lw = max(3, cut_lw)
 
-        pages = []
-        for page_start in range(0, max(1, len(nums)), per_page):
-            chunk = nums[page_start:page_start + per_page]
-            sheet = _I.new("RGB", (PW, PH), "white")
-            draw  = _D.Draw(sheet)
-            for i, n in enumerate(chunk):
-                r  = i // cols
-                c  = i  % cols
-                x0 = off_x + c * (tw + gap)
-                y0 = off_y + r * (th + gap)
-                try:
-                    sheet.paste(self._render_tile(n, tw, th, dpi), (x0, y0))
-                except Exception:
-                    pass
-                if cut_lw:
-                    draw.rectangle(
-                        [x0, y0, x0 + tw - 1, y0 + th - 1],
-                        outline="#888888", width=cut_lw)
-            if self._monochrome.get():
-                sheet = sheet.convert("L").convert("RGB")
-            pages.append(sheet)
-
-        return pages or [_I.new("RGB", (PW, PH), "white")]
+        mono = self._monochrome.get()
+        k = self._k_pct.get()
+        return render_pages(
+            items, grid, dpi,
+            lambda it, tw, th, d: render_item(
+                it, tw, th, d, self._font_path),
+            cut_lw=cut_lw,
+            post=(lambda sh: apply_k_convert(sh, k)) if mono else None)
 
     # ═════════════════════════════════════════════════════════════════════
     # Export / Print
     # ═════════════════════════════════════════════════════════════════════
     def _check_ready(self) -> bool:
+        panel = getattr(self, "_sheet_panel", None)
+        if panel is not None and panel.items:
+            return True   # every sheet item carries its own design
         if not self._selected_tpl or not os.path.isfile(
                 self._selected_tpl.get("path", "")):
             messagebox.showwarning(
@@ -7103,6 +6291,48 @@ class GuideMarkWizard(tk.Toplevel):
         except Exception:
             pass
 
+    def _export_svg(self):
+        """Illustrator-ready SVG: live text + cut marks on their own layers."""
+        if not self._check_ready():
+            return
+        marks = self._svg_marks.get()
+        bleed, arm = self._svg_bleed.get(), self._svg_mark_len.get()
+        if marks == "tombo" and self._gap.get() < bleed + arm:
+            if not messagebox.askyesno(
+                    _t("gmw.title"),
+                    _t("gmw.svg_gap_warn", gap=self._gap.get(),
+                       need=bleed + arm), parent=self):
+                return
+        out_dir = self._get_out_dir()
+        if not out_dir:
+            return
+        grid = make_grid(self._paper.get(), self._orient.get(),
+                         self._tile_w.get(), self._tile_h.get(),
+                         self._margin.get(), self._gap.get())
+        dpi = max(72, self._dpi.get())
+        opts = SvgOptions(
+            marks=marks, bleed_mm=bleed, mark_len_mm=arm,
+            outline_text=self._svg_outline.get(),
+            monochrome=self._monochrome.get(), k_pct=self._k_pct.get(),
+            raster_dpi=dpi, layout_dpi=dpi)
+        base = os.path.splitext(
+            self._export_name.get().strip() or "guidemark_layout")[0]
+        try:
+            paths = export_svg_pages(self._sheet_items(), grid,
+                                     self._font_path, opts,
+                                     os.path.join(out_dir, base))
+        except Exception as e:
+            log.exception("SVG export failed")
+            messagebox.showerror(_t("gmw.title"), str(e), parent=self)
+            return
+        messagebox.showinfo(_t("gmw.title"),
+                            _t("gmw.done_svg", path=paths[0], n=len(paths)),
+                            parent=self)
+        try:
+            os.startfile(out_dir)
+        except OSError:
+            log.warning("cannot open %s", out_dir)
+
     def _export_pdf(self):
         if not self._check_ready():
             return
@@ -7145,9 +6375,12 @@ class GuideMarkWizard(tk.Toplevel):
         if not pages:
             return
         import tempfile
-        tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+        # Save as multi-page TIFF — Windows "Print Pictures" wizard
+        # opens automatically with all print settings (printer, paper, orientation…)
+        tmp = tempfile.NamedTemporaryFile(suffix=".tif", delete=False)
         tmp.close()
-        pages[0].save(tmp.name, "PNG")
+        pages[0].save(tmp.name, "TIFF", save_all=True,
+                      append_images=pages[1:], compression="lzw")
         try:
             os.startfile(tmp.name, "print")
         except Exception as e:
@@ -8359,7 +7592,7 @@ class LinkRedirectorWizard(tk.Toplevel):
         self.title(_t("lrw.title"))
         self.configure(bg=BG)
         self.resizable(True, True)
-        self.minsize(700, 460)
+        scaled_minsize(self, 700, 460)
 
         # Persisted settings in a small JSON sidecar
         self._cfg_path = os.path.join(
@@ -8373,8 +7606,7 @@ class LinkRedirectorWizard(tk.Toplevel):
         self.update_idletasks()
         pw = parent.winfo_rootx(); py = parent.winfo_rooty()
         pw2 = parent.winfo_width(); ph2 = parent.winfo_height()
-        w, h = self.WIN_W, self.WIN_H
-        self.geometry(f"{w}x{h}")
+        scaled_geometry(self, self.WIN_W, self.WIN_H)
         _center_win(self)
 
     # ── Config persistence ────────────────────────────────────────────────────
@@ -8514,7 +7746,7 @@ class LinkRedirectorWizard(tk.Toplevel):
         self._c_result_frame.pack(fill="x", padx=24, pady=(16, 0))
         self._c_result_lbl = tk.Label(
             self._c_result_frame, textvariable=self._c_result_var,
-            bg="#1a2e1a", fg="#51cf66", relief="flat", font=FONT_SM,
+            bg=_blend_hex(BG, FG_GREEN, 0.12), fg=FG_GREEN, relief="flat", font=FONT_SM,
             anchor="w", padx=12, pady=8, wraplength=700, justify="left")
         self._c_copy_btn = btn(self._c_result_frame, _t("lrw.copy"),
                                self._copy_result, primary=False)
@@ -8582,7 +7814,7 @@ class LinkRedirectorWizard(tk.Toplevel):
         short = resp.get("shortUrl", "")
         self._last_short = short
         self._c_result_var.set(f"✓  {short}")
-        self._c_result_lbl.config(bg="#1a2e1a", fg="#51cf66")
+        self._c_result_lbl.config(bg=_blend_hex(BG, FG_GREEN, 0.12), fg=FG_GREEN)
         self._c_result_lbl.pack(side="left", fill="x", expand=True)
         self._c_copy_btn.pack(side="left", padx=(8, 0))
         self._c_result_frame.pack(fill="x", padx=24, pady=(16, 0))
@@ -8590,7 +7822,7 @@ class LinkRedirectorWizard(tk.Toplevel):
     def _on_create_err(self, msg):
         self._last_short = ""
         self._c_result_var.set(f"✗  {msg}")
-        self._c_result_lbl.config(bg="#2e1a1a", fg="#ff6b6b")
+        self._c_result_lbl.config(bg=_blend_hex(BG, FG_RED, 0.12), fg=FG_RED)
         self._c_result_lbl.pack(side="left", fill="x", expand=True)
         self._c_copy_btn.pack_forget()
         self._c_result_frame.pack(fill="x", padx=24, pady=(16, 0))
@@ -8821,7 +8053,7 @@ class PDFExtractorWizard(tk.Toplevel):
         self.title(_t("pdf.title"))
         self.configure(bg=BG)
         self.resizable(True, True)
-        self.minsize(760, 500)
+        scaled_minsize(self, 760, 500)
 
         self._pdf_paths:  list = []
         self._extracted:  dict = {}   # path → list[str]  (one str per page)
@@ -8837,8 +8069,7 @@ class PDFExtractorWizard(tk.Toplevel):
         self.update_idletasks()
         pw = parent.winfo_rootx(); py = parent.winfo_rooty()
         pw2 = parent.winfo_width();  ph2 = parent.winfo_height()
-        w, h = self.WIN_W, self.WIN_H
-        self.geometry(f"{w}x{h}")
+        scaled_geometry(self, self.WIN_W, self.WIN_H)
         _center_win(self)
 
     # ── Build ─────────────────────────────────────────────────────────────────
@@ -9206,26 +8437,1075 @@ class PDFExtractorWizard(tk.Toplevel):
 
 
 # =============================================================================
+#  HTML TEXT FORMATTER
+# =============================================================================
+class HtmlFormatterWizard(tk.Toplevel):
+    """Text → HTML formatter — rapid tagging, auto-format, apply-to-all."""
+
+    WIN_W, WIN_H = 1120, 700
+
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.title("📝  Text / HTML Formatter")
+        self.configure(bg=BG)
+        self.resizable(True, True)
+        scaled_minsize(self, 800, 500)
+
+        self._last_tag = tk.StringVar(value="b")
+        self._tag_buttons: dict = {}   # tag_name → tk.Button
+        self._wbka_var = tk.BooleanVar(value=False)  # word-break: keep-all toggle
+        self._ag_styles = self._load_ag_styles()
+
+        self._build()
+        self.update_idletasks()
+        _center_win(self)
+
+    # ── Layout ────────────────────────────────────────────────────────────────
+    def _build(self):
+        # Accent bar
+        tk.Frame(self, bg=ACCENT, height=3).pack(fill="x")
+
+        # Header
+        hdr = styled_frame(self)
+        hdr.pack(fill="x", padx=20, pady=(14, 6))
+        label(hdr, "📝  Text / HTML Formatter", font=FONT_H1).pack(side="left")
+
+        # Word / char counter (right of header)
+        self._counter_lbl = label(hdr, "", fg=FG2, font=FONT_SM)
+        self._counter_lbl.pack(side="right")
+
+        separator(self).pack(fill="x", padx=20, pady=(0, 8))
+
+        # ── Auto-format bar ───────────────────────────────────────────────────
+        fmt_bar = styled_frame(self)
+        fmt_bar.pack(fill="x", padx=20, pady=(0, 8))
+
+        label(fmt_bar, "Auto-format :", fg=FG2, font=FONT_SM).pack(side="left", padx=(0, 10))
+        self._fmt_var = tk.StringVar(value="paragraphes")
+        for val, lbl_txt in [
+            ("paragraphes", "Paragraphes <p>"),
+            ("br",          "Sauts de ligne <br>"),
+            ("clean",       "Nettoyer (Word)"),
+            ("none",        "Aucun (brut)"),
+        ]:
+            tk.Radiobutton(
+                fmt_bar, text=lbl_txt, variable=self._fmt_var, value=val,
+                bg=BG, fg=FG, selectcolor=BG3, activebackground=BG,
+                activeforeground=FG, font=FONT_SM
+            ).pack(side="left", padx=(0, 12))
+
+        btn(fmt_bar, "▶  Convertir", self._auto_convert, primary=True
+            ).pack(side="left", padx=(14, 0))
+        btn(fmt_bar, "↩  Annuler", self._undo_output, primary=False
+            ).pack(side="left", padx=(6, 0))
+
+        # ── Audio Guide preset row ──────────────────────────────────────────────────
+        ag_row = styled_frame(self)
+        ag_row.pack(fill="x", padx=20, pady=(0, 8))
+        label(ag_row, "🎥  Presets :", fg=FG2, font=FONT_SM).pack(side="left", padx=(0, 10))
+
+        # Audio guide button (toggle-style)
+        self._ag_active_var = tk.BooleanVar(value=False)
+        self._ag_btn = tk.Button(
+            ag_row, text="🎧  Audio Guide (JP)",
+            command=self._toggle_ag_preset,
+            bg=BG3, fg=FG2, font=FONT_SM,
+            relief="flat", bd=0, padx=12, pady=5, cursor="hand2")
+        self._ag_btn.pack(side="left", padx=(0, 6))
+        self._ag_btn.bind("<Enter>",
+            lambda e: self._ag_btn.config(bg=ACCENT_LIGHT, fg=FG)
+            if not self._ag_active_var.get() else None)
+        self._ag_btn.bind("<Leave>",
+            lambda e: self._ag_btn.config(
+                bg=ACCENT if self._ag_active_var.get() else BG3,
+                fg=FG     if self._ag_active_var.get() else FG2))
+
+        btn(ag_row, "▶  Générer HTML", self._ag_run, primary=True
+            ).pack(side="left", padx=(0, 6))
+        btn(ag_row, "⚙  Configurer styles", self._ag_configure, primary=False
+            ).pack(side="left", padx=(0, 6))
+        btn(ag_row, "📂  Importer Excel…", self._ag_import_excel, primary=False
+            ).pack(side="left")
+
+        # ── Main split: Raw | HTML ────────────────────────────────────────────
+        paned = tk.Frame(self, bg=BG)
+        paned.pack(fill="both", expand=True, padx=20, pady=(0, 6))
+
+        # Left — raw input
+        left = styled_frame(paned, bg=BG2)
+        left.pack(side="left", fill="both", expand=True, padx=(0, 6))
+        in_hdr = styled_frame(left, bg=BG2)
+        in_hdr.pack(fill="x", padx=8, pady=(6, 2))
+        label(in_hdr, "Texte brut  (coller ici)", fg=FG2, font=FONT_SM, bg=BG2).pack(side="left")
+        btn(in_hdr, "🗑 Vider", lambda: self._input.delete("1.0", "end"),
+            primary=False).pack(side="right")
+
+        in_frm = tk.Frame(left, bg=BG3)
+        in_frm.pack(fill="both", expand=True, padx=6, pady=(0, 6))
+        isb  = ttk.Scrollbar(in_frm, orient="vertical")
+        isb2 = ttk.Scrollbar(in_frm, orient="horizontal")
+        self._input = tk.Text(
+            in_frm, bg=BG3, fg=FG, insertbackground=FG,
+            relief="flat", font=FONT_MONO, wrap="none", undo=True,
+            yscrollcommand=isb.set, xscrollcommand=isb2.set)
+        isb.config(command=self._input.yview)
+        isb2.config(command=self._input.xview)
+        isb.pack(side="right", fill="y")
+        isb2.pack(side="bottom", fill="x")
+        self._input.pack(fill="both", expand=True, padx=4, pady=4)
+        self._input.bind("<KeyRelease>", lambda e: self._update_counter())
+
+        # Right — HTML output
+        right = styled_frame(paned, bg=BG2)
+        right.pack(side="left", fill="both", expand=True, padx=(6, 0))
+        out_hdr = styled_frame(right, bg=BG2)
+        out_hdr.pack(fill="x", padx=8, pady=(6, 2))
+        label(out_hdr, "HTML (sortie)", fg=FG2, font=FONT_SM, bg=BG2).pack(side="left")
+        btn(out_hdr, "🗑 Vider", lambda: self._output.delete("1.0", "end"),
+            primary=False).pack(side="right")
+
+        out_frm = tk.Frame(right, bg=BG3)
+        out_frm.pack(fill="both", expand=True, padx=6, pady=(0, 6))
+        osb  = ttk.Scrollbar(out_frm, orient="vertical")
+        osb2 = ttk.Scrollbar(out_frm, orient="horizontal")
+        self._output = tk.Text(
+            out_frm, bg=BG3, fg=FG, insertbackground=FG,
+            relief="flat", font=FONT_MONO, wrap="none", undo=True,
+            yscrollcommand=osb.set, xscrollcommand=osb2.set)
+        osb.config(command=self._output.yview)
+        osb2.config(command=self._output.xview)
+        osb.pack(side="right", fill="y")
+        osb2.pack(side="bottom", fill="x")
+        self._output.pack(fill="both", expand=True, padx=4, pady=4)
+        self._output.bind("<KeyRelease>", lambda e: self._highlight_html())
+
+        # Syntax-highlight colour tags — light theme (VSCode Light+ palette),
+        # calibrated for a white/near-white Text background.
+        self._output.tag_configure("hl_tag",     foreground="#0000ff")
+        self._output.tag_configure("hl_attr",    foreground="#0451a5")
+        self._output.tag_configure("hl_val",     foreground="#a31515")
+        self._output.tag_configure("hl_comment", foreground="#008000",
+                                   font=("Consolas", 9, "italic"))
+
+        # ── Tag toolbar ───────────────────────────────────────────────────────
+        separator(self).pack(fill="x", padx=20, pady=(0, 6))
+
+        tb = styled_frame(self)
+        tb.pack(fill="x", padx=20, pady=(0, 6))
+
+        # Row 1 — inline tags
+        row1 = styled_frame(tb)
+        row1.pack(anchor="w", pady=(0, 4))
+        label(row1, "Inline :", fg=FG2, font=FONT_SM).pack(side="left", padx=(0, 8))
+        for txt, tname in [("<b>","b"), ("<i>","i"), ("<u>","u"),
+                            ("<em>","em"), ("<strong>","strong"),
+                            ("<span>","span"), ("<a>","a"), ("<code>","code")]:
+            self._make_tag_btn(row1, txt, tname)
+
+        # Row 2 — block tags
+        row2 = styled_frame(tb)
+        row2.pack(anchor="w", pady=(0, 4))
+        label(row2, "Bloc :   ", fg=FG2, font=FONT_SM).pack(side="left", padx=(0, 8))
+        for txt, tname in [("<h1>","h1"), ("<h2>","h2"), ("<h3>","h3"),
+                            ("<p>","p"), ("<div>","div"), ("<li>","li"),
+                            ("<ul>","ul"), ("<ol>","ol"), ("<section>","section")]:
+            self._make_tag_btn(row2, txt, tname)
+
+        # Row 3 — CSS styles
+        row3 = styled_frame(tb)
+        row3.pack(anchor="w", pady=(0, 4))
+        label(row3, "CSS :    ", fg=FG2, font=FONT_SM).pack(side="left", padx=(0, 8))
+        self._wbka_btn = tk.Button(
+            row3, text="word-break: keep-all",
+            command=self._toggle_wbka,
+            bg=BG3, fg=FG2, font=("Consolas", 9),
+            relief="flat", bd=0, padx=9, pady=4, cursor="hand2")
+        self._wbka_btn.pack(side="left", padx=2)
+        self._wbka_btn.bind("<Enter>", lambda e: self._wbka_btn.config(
+            bg=ACCENT_LIGHT if not self._wbka_var.get() else ACCENT2, fg=FG))
+        self._wbka_btn.bind("<Leave>", lambda e: self._wbka_btn.config(
+            bg=ACCENT if self._wbka_var.get() else BG3,
+            fg=FG if self._wbka_var.get() else FG2))
+        btn(row3, "🏷  wrap sél.",  self._wbka_wrap_sel,  primary=False
+            ).pack(side="left", padx=(10, 2))
+        btn(row3, "🔁  appliquer sur tout", self._wbka_apply_all, primary=False
+            ).pack(side="left", padx=2)
+        btn(row3, "🗑  retirer partout", self._wbka_strip_all, primary=False
+            ).pack(side="left", padx=2)
+
+        # Row 4 — actions
+        row4 = styled_frame(tb)
+        row4.pack(anchor="w", pady=(0, 4))
+        btn(row4, "🏷  Baliser la sélection",
+            self._wrap_selection, primary=True).pack(side="left", padx=(0, 6))
+        btn(row4, "🔁  Appliquer sur tout",
+            self._apply_to_all,  primary=True).pack(side="left", padx=(0, 6))
+        btn(row4, "📋  Copier HTML",
+            self._copy_html,     primary=False).pack(side="left", padx=(0, 6))
+        btn(row4, "🌐  Aperçu navigateur",
+            self._preview_browser, primary=False).pack(side="left", padx=(0, 6))
+        btn(row4, "🗑  Tout effacer",
+            self._clear_all,     primary=False).pack(side="left")
+
+        # Status bar
+        self._status = label(self, "", fg=FG2, font=FONT_SM)
+        self._status.pack(anchor="w", padx=20, pady=(0, 10))
+
+    # ── Tag button helpers ────────────────────────────────────────────────────
+    def _make_tag_btn(self, parent: tk.Frame, display: str, tag_name: str):
+        b = tk.Button(
+            parent, text=display,
+            command=lambda t=tag_name: self._select_tag(t),
+            bg=BG3, fg=FG2, font=("Consolas", 9),
+            relief="flat", bd=0, padx=9, pady=4,
+            activebackground=ACCENT, activeforeground=FG,
+            cursor="hand2")
+        b.pack(side="left", padx=2)
+        self._tag_buttons[tag_name] = b
+
+        def _enter(e, _b=b): _b.config(bg=ACCENT_LIGHT, fg=FG)
+        def _leave(e, _b=b, t=tag_name):
+            if self._last_tag.get() == t:
+                _b.config(bg=ACCENT, fg=FG)
+            else:
+                _b.config(bg=BG3, fg=FG2)
+
+        b.bind("<Enter>", _enter)
+        b.bind("<Leave>", _leave)
+
+    def _select_tag(self, tag_name: str):
+        # Deselect old
+        old = self._last_tag.get()
+        if old in self._tag_buttons:
+            self._tag_buttons[old].config(bg=BG3, fg=FG2)
+        # Select new
+        self._last_tag.set(tag_name)
+        if tag_name in self._tag_buttons:
+            self._tag_buttons[tag_name].config(bg=ACCENT, fg=FG)
+
+    # ── Auto-conversion ───────────────────────────────────────────────────────
+    def _auto_convert(self):
+        raw = self._input.get("1.0", "end-1c")
+        if not raw.strip():
+            self._flash("⚠  Collez du texte dans la zone de gauche.", FG_YELLOW)
+            return
+        mode = self._fmt_var.get()
+        try:
+            html = self._convert(raw, mode)
+        except Exception as ex:
+            import traceback
+            messagebox.showerror("Erreur de conversion",
+                                 traceback.format_exc(), parent=self)
+            return
+        self._output.delete("1.0", "end")
+        self._output.insert("1.0", html)
+        self._highlight_html()
+        self._flash(f"✓  Converti ({mode}).", FG_GREEN)
+
+    def _convert(self, raw: str, mode: str) -> str:
+        if mode in ("clean", "paragraphes"):
+            if mode == "clean":
+                raw = self._clean_word(raw)
+            paragraphs = re.split(r"\n\s*\n", raw)
+            parts = []
+            for p in paragraphs:
+                p = p.strip()
+                if p:
+                    p = p.replace("\n", "<br>\n")
+                    parts.append(f"<p>{p}</p>")
+            return "\n".join(parts)
+        elif mode == "br":
+            return raw.replace("\n", "<br>\n")
+        elif mode == "audio_guide":
+            return self._convert_audio_guide(raw)
+        else:  # none
+            return raw
+
+    @staticmethod
+    def _clean_word(text: str) -> str:
+        """Strip common Word/Office artefacts."""
+        text = text.replace("\u201c", '"').replace("\u201d", '"')
+        text = text.replace("\u2018", "'").replace("\u2019", "'")
+        text = text.replace("\u2014", "--").replace("\u2013", "-")
+        text = text.replace("\u2026", "...").replace("\u00a0", " ")
+        text = re.sub(r"[^\S\n]+", " ", text)
+        text = "\n".join(line.rstrip() for line in text.splitlines())
+        return text
+
+    def _undo_output(self):
+        try:
+            self._output.edit_undo()
+        except tk.TclError:
+            pass
+
+    # ── Tag wrapping ──────────────────────────────────────────────────────────
+    def _wrap_selection(self):
+        """Wrap the current selection in the OUTPUT area with the active tag."""
+        tag = self._last_tag.get()
+        try:
+            sel = self._output.get(tk.SEL_FIRST, tk.SEL_LAST)
+        except tk.TclError:
+            self._flash("⚠  Sélectionnez du texte dans la zone HTML.", FG_YELLOW)
+            return
+        wrapped = self._build_tag(tag, sel)
+        if wrapped is None:
+            return   # user cancelled href dialog
+        self._output.delete(tk.SEL_FIRST, tk.SEL_LAST)
+        self._output.insert(tk.INSERT, wrapped)
+        self._highlight_html()
+        self._flash(f"✓  <{tag}> appliqué à la sélection.", FG_GREEN)
+
+    def _apply_to_all(self):
+        """Wrap EVERY plain occurrence of the selection with the active tag."""
+        tag = self._last_tag.get()
+        try:
+            sel = self._output.get(tk.SEL_FIRST, tk.SEL_LAST)
+        except tk.TclError:
+            self._flash("⚠  Sélectionnez le texte modèle dans la zone HTML.", FG_YELLOW)
+            return
+        if not sel.strip():
+            self._flash("⚠  La sélection est vide.", FG_YELLOW)
+            return
+
+        wrapped = self._build_tag(tag, sel)
+        if wrapped is None:
+            return   # user cancelled
+
+        html = self._output.get("1.0", "end-1c")
+
+        # Protect already-wrapped occurrences with a placeholder
+        already = f"<{tag}>{sel}</{tag}>"
+        placeholder = f"\x00WRAPPED_{tag}\x00"
+        html2 = html.replace(already, placeholder)
+        count = html2.count(sel)
+        if count == 0:
+            html2 = html2.replace(placeholder, already)
+            self._flash("⚠  Aucune occurrence non balisée trouvée.", FG_YELLOW)
+            self._output.delete("1.0", "end")
+            self._output.insert("1.0", html2)
+            return
+        html2 = html2.replace(sel, wrapped)
+        html2 = html2.replace(placeholder, already)
+
+        self._output.delete("1.0", "end")
+        self._output.insert("1.0", html2)
+        self._highlight_html()
+        self._flash(f"✓  {count} occurrence(s) balisée(s) avec <{tag}>.", FG_GREEN)
+
+    def _build_tag(self, tag: str, content: str):
+        """Return the HTML string wrapping content with tag.  Returns None if cancelled."""
+        if tag == "a":
+            href = self._ask_href()
+            if href is None:
+                return None
+            return f'<a href="{href}">{content}</a>'
+        return f"<{tag}>{content}</{tag}>"
+
+    def _ask_href(self):
+        """Modal dialog — returns the entered URL, or None if cancelled."""
+        dlg = tk.Toplevel(self)
+        dlg.title("Lien <a>")
+        dlg.configure(bg=BG)
+        dlg.resizable(False, False)
+        dlg.grab_set()
+
+        label(dlg, "URL du lien :", font=FONT_BODY).pack(padx=24, pady=(18, 4))
+        href_var = tk.StringVar(value="https://")
+        e = entry(dlg, textvariable=href_var, width=52)
+        e.pack(padx=24, pady=4)
+        e.focus_set()
+        e.select_range(0, "end")
+
+        result = [None]   # None = cancelled
+
+        def _ok(event=None):
+            result[0] = href_var.get() or "#"
+            dlg.destroy()
+
+        def _cancel():
+            dlg.destroy()
+
+        bf = styled_frame(dlg)
+        bf.pack(pady=14)
+        btn(bf, "OK",       _ok,     primary=True ).pack(side="left", padx=6)
+        btn(bf, "Annuler",  _cancel, primary=False).pack(side="left", padx=6)
+        e.bind("<Return>", _ok)
+        dlg.bind("<Escape>", lambda e: _cancel())
+        _center_win(dlg)
+        dlg.wait_window()
+        return result[0]
+
+    # ── Copy / Preview ────────────────────────────────────────────────────────
+    def _copy_html(self):
+        html = self._output.get("1.0", "end-1c")
+        self.clipboard_clear()
+        self.clipboard_append(html)
+        self._flash("✓  HTML copié dans le presse-papier !", FG_GREEN)
+
+    # ── Audio Guide preset ────────────────────────────────────────────────────
+    _AG_CONFIG_FILE = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "_html_formatter_config.json")
+
+    _AG_DEFAULTS = {
+        "h2_style":      "font-size:22pt; font-weight:bold; margin:20px 0;",
+        "p_style":       "",
+        "trailing_empty": 2,
+        "col_id":        "A",
+        "col_title":     "B",
+        "col_body":      "C",
+        "skip_rows":     1,
+    }
+
+    def _load_ag_styles(self) -> dict:
+        try:
+            with open(self._AG_CONFIG_FILE, encoding="utf-8") as f:
+                saved = json.load(f)
+            styles = dict(self._AG_DEFAULTS)
+            styles.update(saved)
+            return styles
+        except Exception:
+            return dict(self._AG_DEFAULTS)
+
+    def _save_ag_styles(self):
+        try:
+            with open(self._AG_CONFIG_FILE, "w", encoding="utf-8") as f:
+                json.dump(self._ag_styles, f, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
+
+    def _toggle_ag_preset(self):
+        self._ag_active_var.set(not self._ag_active_var.get())
+        on = self._ag_active_var.get()
+        self._ag_btn.config(bg=ACCENT if on else BG3,
+                            fg=FG     if on else FG2)
+
+    def _ag_run(self):
+        raw = self._input.get("1.0", "end-1c")
+        if not raw.strip():
+            self._flash("⚠  Collez le texte Excel dans la zone de gauche.", FG_YELLOW)
+            return
+        try:
+            html = self._convert_audio_guide(raw)
+        except Exception as ex:
+            import traceback
+            messagebox.showerror("Erreur de conversion",
+                                 traceback.format_exc(), parent=self)
+            return
+        self._output.delete("1.0", "end")
+        self._output.insert("1.0", html)
+        self._highlight_html()
+        self._flash("✓  HTML Audio Guide généré.", FG_GREEN)
+
+    def _convert_audio_guide(self, raw: str) -> str:
+        st   = self._ag_styles
+        lines = [l.rstrip() for l in raw.splitlines()]
+        # drop leading blank lines
+        while lines and not lines[0].strip():
+            lines.pop(0)
+        if not lines:
+            return ""
+
+        result = []
+        i = 0
+
+        # ── Try to detect ARTIST《WORK》DATE on the first line ─────────────
+        first = lines[0]
+        m = re.match(
+            r'^(.*?)(?:[《（<\(])(.*?)(?:[》）>\)])\s*(\d[\d\s\S]{0,20}?(?:年|月)[\d〜\-~]*(?:月|年)?[^♪\n]*)?\s*$',
+            first.strip())
+        if m:
+            artist = m.group(1).strip()
+            work   = m.group(2).strip()
+            date   = (m.group(3) or "").strip()
+
+            def _h2(txt, sty):
+                a = f' style="{sty}"' if sty else ""
+                return f"<h2{a}>{txt}</h2>"
+
+            def _p(txt, sty):
+                a = f' style="{sty}"' if sty else ""
+                return f"<p{a}>{txt}</p>"
+
+            if artist:
+                result.append(_h2(artist, st["h2_artist_style"]))
+            if work:
+                wo = st["work_bracket_open"]
+                wc = st["work_bracket_close"]
+                result.append(_h2(f"{wo}{work}{wc}", st["h2_work_style"]))
+            if date:
+                result.append(_p(date, st["p_date_style"]))
+            i += 1
+        else:
+            # Fallback: treat first line as a plain h2 if short, else p
+            sty = st["h2_artist_style"]
+            a   = f' style="{sty}"' if sty else ""
+            result.append(f'<h2{a}>{first.strip()}</h2>')
+            i += 1
+
+        # ── Remaining lines ───────────────────────────────────────────────
+        while i < len(lines):
+            line = lines[i]
+            stripped = line.strip()
+
+            if not stripped:
+                i += 1
+                continue
+
+            # BGM block: collect all consecutive non-empty lines
+            if re.match(r'^♪\s*BGM', stripped):
+                bgm_block = []
+                while i < len(lines) and lines[i].strip():
+                    l = lines[i]
+                    # append &nbsp; after ♪BGM marker
+                    l = re.sub(r'^(♪\s*BGM)', r'\1&nbsp;', l, count=1)
+                    if st["auto_link_urls"]:
+                        l = re.sub(
+                            r'(https?://[^\s\u3000<>]+)',
+                            r'<a href="\1">\1</a>', l)
+                    bgm_block.append(l)
+                    i += 1
+                bs = st["p_bgm_style"]
+                ba = f' style="{bs}"' if bs else ""
+                inner = '<br />\n'.join(bgm_block)
+                result.append(f'<p{ba}>{inner}</p>')
+            else:
+                txt = stripped
+                if st["auto_link_urls"]:
+                    txt = re.sub(
+                        r'(https?://[^\s\u3000<>]+)',
+                        r'<a href="\1">\1</a>', txt)
+                bs = st["p_body_style"]
+                ba = f' style="{bs}"' if bs else ""
+                result.append(f'<p{ba}>{txt}</p>')
+                i += 1
+
+        # ── Trailing empty paragraphs ─────────────────────────────────────
+        for _ in range(int(st.get("trailing_empty", 2))):
+            result.append('<p>&nbsp;</p>')
+
+        return '\n'.join(result)
+
+    def _ag_configure(self):
+        """Config dialog — just h2 style, p style, trailing empty paragraphs."""
+        dlg = tk.Toplevel(self)
+        dlg.title("⚙  Styles HTML")
+        dlg.configure(bg=BG)
+        dlg.resizable(True, False)
+        dlg.grab_set()
+
+        st = self._ag_styles
+
+        fields = [
+            ("h2_style", "Style <h2>  (titre)"),
+            ("p_style",  "Style <p>   (corps)"),
+        ]
+        vars_ = {}
+        for row_i, (key, lbl_txt) in enumerate(fields):
+            tk.Label(dlg, text=lbl_txt + " :", bg=BG, fg=FG2,
+                     font=FONT_SM).grid(row=row_i, column=0, sticky="e",
+                                        padx=(16, 8), pady=8)
+            v = tk.StringVar(value=st.get(key, ""))
+            vars_[key] = v
+            tk.Entry(dlg, textvariable=v, bg=BG3, fg=FG,
+                     insertbackground=FG, relief="flat", font=FONT_MONO,
+                     width=56).grid(row=row_i, column=1, padx=(0, 16),
+                                    pady=8, sticky="ew")
+        dlg.columnconfigure(1, weight=1)
+
+        # Trailing empty <p>&nbsp;</p>
+        tk.Label(dlg, text="<p>&nbsp;</p> finaux :", bg=BG, fg=FG2,
+                 font=FONT_SM).grid(row=2, column=0, sticky="e",
+                                    padx=(16, 8), pady=8)
+        trail_var = tk.IntVar(value=st.get("trailing_empty", 2))
+        tk.Spinbox(dlg, from_=0, to=10, width=4, textvariable=trail_var,
+                   bg=BG3, fg=FG, buttonbackground=BG3,
+                   relief="flat").grid(row=2, column=1, sticky="w",
+                                       padx=(0, 16), pady=8)
+
+        # Live preview
+        prev = tk.Label(dlg, text="", bg=BG3, fg=FG2, font=FONT_MONO,
+                        justify="left", anchor="w", wraplength=520,
+                        padx=8, pady=6)
+        prev.grid(row=3, column=0, columnspan=2, sticky="ew", padx=16, pady=(8, 4))
+
+        def _refresh(*_):
+            h2s = vars_["h2_style"].get()
+            ps  = vars_["p_style"].get()
+            h2a = f' style="{h2s}"' if h2s else ""
+            pa  = f' style="{ps}"'  if ps  else ""
+            prev.config(text=(
+                f'<h2{h2a}>1、はじめに 〜ファン・ゴッホ・ファミリー</h2>\n'
+                f'<p{pa}>♪BGM ユリウス・クレンゲル…</p>\n'
+                f'<p>&nbsp;</p>  (×{trail_var.get()})'
+            ))
+        for v in vars_.values():
+            v.trace_add("write", _refresh)
+        trail_var.trace_add("write", _refresh)
+        _refresh()
+
+        def _ok():
+            for key, v in vars_.items():
+                st[key] = v.get()
+            st["trailing_empty"] = trail_var.get()
+            self._save_ag_styles()
+            dlg.destroy()
+            self._flash("✓  Styles sauvegardés.", FG_GREEN)
+
+        def _reset():
+            for key, v in vars_.items():
+                v.set(self._AG_DEFAULTS.get(key, ""))
+            trail_var.set(self._AG_DEFAULTS["trailing_empty"])
+
+        bf = styled_frame(dlg)
+        bf.grid(row=4, column=0, columnspan=2, pady=14)
+        btn(bf, "💾  Sauvegarder",   _ok,        primary=True ).pack(side="left", padx=6)
+        btn(bf, "↩  Réinitialiser", _reset,     primary=False).pack(side="left", padx=6)
+        btn(bf, "✕  Annuler",       dlg.destroy, primary=False).pack(side="left", padx=6)
+
+    def _ag_import_excel(self):
+        """Batch-import an Excel file → generate full HTML for all rows."""
+        try:
+            import importlib
+            openpyxl = importlib.import_module("openpyxl")
+        except ImportError:
+            if messagebox.askyesno(
+                    "openpyxl requis",
+                    "openpyxl n'est pas installé.\nInstaller maintenant ?",
+                    parent=self):
+                import subprocess as _sp
+                _sp.check_call([sys.executable, "-m", "pip", "install",
+                                "openpyxl", "-q"])
+                import importlib
+                openpyxl = importlib.import_module("openpyxl")
+            else:
+                return
+
+        path = filedialog.askopenfilename(
+            parent=self,
+            title="Sélectionner le fichier Excel",
+            filetypes=[("Excel", "*.xlsx *.xlsm *.xls"), ("Tous", "*.*")])
+        if not path:
+            return
+
+        try:
+            wb = openpyxl.load_workbook(path, data_only=True)
+        except Exception as ex:
+            messagebox.showerror("Erreur", str(ex), parent=self)
+            return
+
+        self._ag_excel_batch(wb, path)
+
+    def _ag_excel_batch(self, wb, path: str):
+        """Batch dialog: table of all rows → generate complete HTML in one click."""
+        dlg = tk.Toplevel(self)
+        dlg.title("📂  Import Excel — Batch HTML")
+        dlg.configure(bg=BG)
+        dlg.resizable(True, True)
+        scaled_minsize(dlg, 900, 580)
+        dlg.grab_set()
+
+        st = self._ag_styles   # live config
+
+        # ── Top bar ───────────────────────────────────────────────────────────
+        top = styled_frame(dlg)
+        top.pack(fill="x", padx=16, pady=(12, 4))
+        label(top, f"📄  {os.path.basename(path)}", font=FONT_BODY).pack(side="left")
+
+        # ── Config row 1 : sheet + first data row ─────────────────────────────
+        cr1 = styled_frame(dlg)
+        cr1.pack(fill="x", padx=16, pady=(0, 4))
+        label(cr1, "Feuille :", font=FONT_SM, fg=FG2).pack(side="left", padx=(0, 6))
+        sheet_var = tk.StringVar(value=wb.sheetnames[0])
+        combo(cr1, sheet_var, wb.sheetnames, width=26).pack(side="left")
+        label(cr1, "  Prem. ligne data :", font=FONT_SM, fg=FG2).pack(side="left", padx=(14, 6))
+        skip_var = tk.IntVar(value=int(st.get("skip_rows", 1)) + 1)
+        tk.Spinbox(cr1, from_=1, to=50, width=4, textvariable=skip_var,
+                   bg=BG3, fg=FG, buttonbackground=BG3,
+                   relief="flat").pack(side="left")
+        label(cr1, "  (1 = pas d'en-tête)", font=FONT_SM, fg=FG2).pack(side="left", padx=(4,0))
+
+        # ── Config row 2 : column mapping ─────────────────────────────────────
+        cr2 = styled_frame(dlg)
+        cr2.pack(fill="x", padx=16, pady=(0, 8))
+        def _col_entry(parent, lbl_txt, default):
+            label(parent, lbl_txt, font=FONT_SM, fg=FG2).pack(side="left", padx=(0, 4))
+            v = tk.StringVar(value=default)
+            entry(parent, textvariable=v, width=4).pack(side="left")
+            label(parent, "  ", font=FONT_SM).pack(side="left")
+            return v
+        col_id_var    = _col_entry(cr2, "Col ガイドNo :", st.get("col_id",    "A"))
+        col_title_var = _col_entry(cr2, "Col タイトル :",  st.get("col_title", "B"))
+        col_body_var  = _col_entry(cr2, "Col 本文 :",       st.get("col_body",  "C"))
+
+        # ── Treeview table ────────────────────────────────────────────────────
+        tv_frame = tk.Frame(dlg, bg=BG3)
+        tv_frame.pack(fill="both", expand=True, padx=16, pady=(0, 6))
+
+        vsb = ttk.Scrollbar(tv_frame, orient="vertical")
+        hsb = ttk.Scrollbar(tv_frame, orient="horizontal")
+        style = ttk.Style(dlg)
+        style.configure("Excel.Treeview",
+                        background=BG3, fieldbackground=BG3,
+                        foreground=FG, rowheight=22, font=FONT_SM)
+        style.configure("Excel.Treeview.Heading",
+                        background=BG2, foreground=FG2, font=FONT_SM)
+        style.map("Excel.Treeview",
+                  background=[("selected", ACCENT)],
+                  foreground=[("selected", FG)])
+
+        tv = ttk.Treeview(tv_frame, style="Excel.Treeview",
+                          columns=("id", "title", "body"),
+                          show="headings", selectmode="extended",
+                          yscrollcommand=vsb.set, xscrollcommand=hsb.set)
+        tv.heading("id",    text="ガイドNo", anchor="w")
+        tv.heading("title", text="タイトル（略記）", anchor="w")
+        tv.heading("body",  text="本文（作品タイトル等詳細）", anchor="w")
+        tv.column("id",    width=80,  stretch=False)
+        tv.column("title", width=220, stretch=False)
+        tv.column("body",  width=500, stretch=True)
+        vsb.config(command=tv.yview)
+        hsb.config(command=tv.xview)
+        vsb.pack(side="right", fill="y")
+        hsb.pack(side="bottom", fill="x")
+        tv.pack(fill="both", expand=True)
+
+        # Row data cache  { iid: (id_val, title_val, body_val) }
+        _row_data: dict = {}
+
+        def _load(*_):
+            tv.delete(*tv.get_children())
+            _row_data.clear()
+            try:
+                ws      = wb[sheet_var.get()]
+                ci_id   = self._col_letter_to_idx(col_id_var.get().strip().upper()   or "A")
+                ci_ttl  = self._col_letter_to_idx(col_title_var.get().strip().upper() or "B")
+                ci_body = self._col_letter_to_idx(col_body_var.get().strip().upper()  or "C")
+                first   = max(1, skip_var.get())
+                for r in ws.iter_rows(min_row=first):
+                    max_ci = max(ci_id, ci_ttl, ci_body)
+                    if len(r) <= max_ci:
+                        continue
+                    id_val   = str(r[ci_id  ].value or "").strip()
+                    ttl_val  = str(r[ci_ttl ].value or "").strip()
+                    body_val = str(r[ci_body].value or "").strip()
+                    if not ttl_val and not body_val:
+                        continue
+                    iid = str(r[0].row)
+                    body_snip = body_val[:120].replace("\n", " ")
+                    tv.insert("", "end", iid=iid,
+                              values=(id_val, ttl_val, body_snip))
+                    _row_data[iid] = (id_val, ttl_val, body_val)
+            except Exception as ex:
+                tv.insert("", "end", values=("ERR", str(ex), ""))
+
+        # Preview
+        prev_frm = tk.Frame(dlg, bg=BG3, height=90)
+        prev_frm.pack(fill="x", padx=16, pady=(0, 4))
+        prev_frm.pack_propagate(False)
+        prev_text = tk.Text(prev_frm, bg=BG3, fg=FG2, font=FONT_MONO,
+                            relief="flat", state="disabled", wrap="word")
+        prev_text.pack(fill="both", expand=True, padx=4, pady=4)
+
+        def _on_select(event=None):
+            sel = tv.selection()
+            if not sel:
+                return
+            iid = sel[-1]
+            if iid in _row_data:
+                _, ttl, body = _row_data[iid]
+                prev_text.config(state="normal")
+                prev_text.delete("1.0", "end")
+                prev_text.insert("1.0", f"TITRE : {ttl}\n\n{body[:400]}")
+                prev_text.config(state="disabled")
+
+        tv.bind("<<TreeviewSelect>>", _on_select)
+
+        # Trace column changes to reload
+        for v in (sheet_var, col_id_var, col_title_var, col_body_var, skip_var):
+            v.trace_add("write", _load)
+        _load()
+
+        # ── Bottom toolbar ────────────────────────────────────────────────────
+        bot = styled_frame(dlg)
+        bot.pack(fill="x", padx=16, pady=(0, 10))
+
+        def _select_all():
+            tv.selection_set(tv.get_children())
+        def _deselect_all():
+            tv.selection_remove(tv.get_children())
+
+        btn(bot, "☑  Tout sélectionner",   _select_all,   primary=False).pack(side="left", padx=(0, 4))
+        btn(bot, "☐  Tout désélectionner", _deselect_all, primary=False).pack(side="left", padx=(0, 20))
+
+        # word-break: keep-all toggle
+        wbka_var = tk.BooleanVar(value=st.get("wbka", False))
+        def _update_wbka_btn():
+            on = wbka_var.get()
+            wbka_btn.config(
+                bg=ACCENT if on else BG3,
+                fg=FG if on else FG2,
+                relief="flat")
+        wbka_btn = tk.Button(
+            bot, text="word-break: keep-all",
+            font=FONT_SM,
+            relief="flat", bd=0, padx=8, pady=3, cursor="hand2",
+            command=lambda: [wbka_var.set(not wbka_var.get()), _update_wbka_btn()])
+        _update_wbka_btn()
+        wbka_btn.pack(side="right", padx=(8, 0))
+
+        def _generate(only_sel=True):
+            items = tv.selection() if only_sel else tv.get_children()
+            if not items:
+                self._flash("⚠  Aucune ligne sélectionnée.", FG_YELLOW)
+                return
+            # Save col config
+            st["col_id"]    = col_id_var.get().strip().upper()    or "A"
+            st["col_title"] = col_title_var.get().strip().upper() or "B"
+            st["col_body"]  = col_body_var.get().strip().upper()  or "C"
+            st["skip_rows"] = skip_var.get() - 1
+            st["wbka"]      = wbka_var.get()
+            self._save_ag_styles()
+
+            h2_sty = st.get("h2_style", "font-size:22pt; font-weight:bold; margin:20px 0;")
+            p_sty  = st.get("p_style", "")
+            trail  = int(st.get("trailing_empty", 2))
+            # Inject word-break: keep-all if toggle is ON
+            if wbka_var.get():
+                wbka_css = "word-break: keep-all;"
+                h2_sty = (h2_sty.rstrip("; ") + "; " + wbka_css).lstrip("; ")
+                p_sty  = (p_sty.rstrip("; ")  + "; " + wbka_css).lstrip("; ")
+            h2a    = f' style="{h2_sty}"' if h2_sty else ""
+            pa     = f' style="{p_sty}"'  if p_sty  else ""
+
+            parts = []
+            for iid in items:
+                if iid not in _row_data:
+                    continue
+                id_val, ttl_val, body_val = _row_data[iid]
+                block = []
+                # Guide number as HTML comment — visible in code, invisible in browser
+                num_ref = id_val or re.match(r"^(\d+)", ttl_val or "")
+                if num_ref:
+                    num_str = num_ref if isinstance(num_ref, str) else num_ref.group(1)
+                    block.append(f"<!-- {num_str} -->")
+                if ttl_val:
+                    # Strip leading number prefix: "1、" "55、" "1." "1 " etc.
+                    ttl_clean = re.sub(r"^\d+[、。．.,\s]+", "", ttl_val).strip()
+                    block.append(f"<h2{h2a}>{ttl_clean}</h2>")
+                if body_val:
+                    # Normalise Windows/Mac line endings from Excel
+                    body_norm = body_val.replace("\r\n", "\n").replace("\r", "\n")
+                    # Split on blank lines → separate <p> blocks
+                    for para in re.split(r"\n{2,}", body_norm):
+                        # Keep each line exactly as-is; only trim the block edges
+                        para = para.strip("\n")
+                        if not para:
+                            continue
+                        # Single line breaks within a block → <br />
+                        inner = para.replace("\n", "<br />\n")
+                        block.append(f"<p{pa}>{inner}</p>")
+                for _ in range(trail):
+                    block.append("<p>&nbsp;</p>")
+                if block:
+                    parts.append("\n".join(block))
+
+            full_html = "\n\n".join(parts)
+            self._output.delete("1.0", "end")
+            self._output.insert("1.0", full_html)
+            self._highlight_html()
+            dlg.destroy()
+            self._flash(f"✓  HTML généré pour {len(parts)} entrée(s).", FG_GREEN)
+
+        btn(bot, "▶  Générer HTML (sélection)", lambda: _generate(True),
+            primary=True).pack(side="left", padx=(0, 6))
+        btn(bot, "▶▶  Générer HTML (tout)",     lambda: _generate(False),
+            primary=True).pack(side="left", padx=(0, 14))
+        btn(bot, "✕  Fermer", dlg.destroy, primary=False).pack(side="right")
+
+        _center_win(dlg)
+
+    @staticmethod
+    def _col_letter_to_idx(col: str) -> int:
+        """Convert column letter(s) like 'C' or 'AA' to 0-based index."""
+        col = col.upper()
+        idx = 0
+        for c in col:
+            idx = idx * 26 + (ord(c) - ord('A') + 1)
+        return idx - 1
+
+    # ── word-break: keep-all helpers ─────────────────────────────────────────
+    _WBKA_STYLE = 'style="word-break: keep-all;"'
+    _WBKA_OPEN  = '<span style="word-break: keep-all;">'
+    _WBKA_CLOSE = '</span>'
+
+    def _toggle_wbka(self):
+        self._wbka_var.set(not self._wbka_var.get())
+        on = self._wbka_var.get()
+        self._wbka_btn.config(bg=ACCENT if on else BG3,
+                              fg=FG     if on else FG2)
+        state = "activé (aperçu)" if on else "désactivé"
+        self._flash(f"word-break: keep-all  {state}.",
+                    FG_GREEN if on else FG2)
+
+    def _wbka_wrap_sel(self):
+        """Wrap the current HTML selection in a keep-all span."""
+        try:
+            sel = self._output.get(tk.SEL_FIRST, tk.SEL_LAST)
+        except tk.TclError:
+            self._flash("⚠  Sélectionnez du texte dans la zone HTML.", FG_YELLOW)
+            return
+        wrapped = self._WBKA_OPEN + sel + self._WBKA_CLOSE
+        self._output.delete(tk.SEL_FIRST, tk.SEL_LAST)
+        self._output.insert(tk.INSERT, wrapped)
+        self._highlight_html()
+        self._flash("✓  word-break: keep-all appliqué à la sélection.", FG_GREEN)
+
+    def _wbka_apply_all(self):
+        """Wrap every <p>, <li>, <h1-6> block that doesn't already have keep-all."""
+        html = self._output.get("1.0", "end-1c")
+        if not html.strip():
+            self._flash("⚠  Zone HTML vide.", FG_YELLOW)
+            return
+        count = [0]
+
+        def _replace(m):
+            tag, attrs, content = m.group(1), m.group(2), m.group(3)
+            if "word-break" in attrs:
+                return m.group(0)   # already tagged
+            count[0] += 1
+            # Inject into existing style attr if present, else add new attr
+            if 'style="' in attrs:
+                attrs2 = attrs.replace('style="', 'style="word-break: keep-all; ', 1)
+            else:
+                attrs2 = attrs + ' style="word-break: keep-all;"'
+            return f"<{tag}{attrs2}>{content}</{tag}>"
+
+        pattern = r"<(p|li|h[1-6])(\s[^>]*)?>([\s\S]*?)</\1>"
+        html2 = re.sub(pattern, _replace, html, flags=re.IGNORECASE)
+        self._output.delete("1.0", "end")
+        self._output.insert("1.0", html2)
+        self._highlight_html()
+        self._flash(f"✓  word-break: keep-all injecté sur {count[0]} bloc(s).", FG_GREEN)
+
+    def _wbka_strip_all(self):
+        """Remove all word-break: keep-all inline styles from the output."""
+        html = self._output.get("1.0", "end-1c")
+        # Remove standalone attribute: style="word-break: keep-all;"
+        html2 = re.sub(r'\s*style="word-break:\s*keep-all;?"', "", html)
+        # Remove when it was injected at the start of a multi-property style
+        html2 = re.sub(r'word-break:\s*keep-all;\s*', "", html2)
+        # Remove empty style attributes left over
+        html2 = re.sub(r'\s*style="\s*"', "", html2)
+        # Remove bare keep-all <span> wrappers
+        html2 = re.sub(
+            r'<span style="word-break:\s*keep-all;?">([\s\S]*?)</span>',
+            r'\1', html2)
+        self._output.delete("1.0", "end")
+        self._output.insert("1.0", html2)
+        self._highlight_html()
+        self._flash("✓  word-break: keep-all retiré de tout le document.", FG_GREEN)
+
+    def _preview_browser(self):
+        import tempfile, webbrowser
+        html = self._output.get("1.0", "end-1c")
+        wbka_css = "word-break: keep-all; " if self._wbka_var.get() else ""
+        page = (
+            "<!DOCTYPE html>\n<html lang='fr'>\n<head>"
+            "<meta charset='UTF-8'><title>Aperçu HTML</title>"
+            f"<style>body{{font-family:Segoe UI,sans-serif;padding:40px;"
+            f"max-width:860px;margin:auto;line-height:1.6;{wbka_css}}}</style>"
+            "</head><body>" + html + "</body>\n</html>"
+        )
+        with tempfile.NamedTemporaryFile(
+                "w", suffix=".html", delete=False, encoding="utf-8") as f:
+            f.write(page)
+            tmp = f.name
+        import webbrowser
+        webbrowser.open(f"file:///{tmp}")
+        self._flash("✓  Aperçu ouvert dans le navigateur.", FG_GREEN)
+
+    def _clear_all(self):
+        self._input.delete("1.0", "end")
+        self._output.delete("1.0", "end")
+        self._counter_lbl.config(text="")
+        self._flash("Effacé.", FG2)
+
+    # ── Live stats ────────────────────────────────────────────────────────────
+    def _update_counter(self):
+        txt = self._input.get("1.0", "end-1c")
+        words = len(txt.split()) if txt.strip() else 0
+        chars = len(txt)
+        self._counter_lbl.config(text=f"{words} mots  ·  {chars} car.")
+
+    # ── Syntax highlighting ───────────────────────────────────────────────────
+    def _highlight_html(self):
+        try:
+            self._do_highlight_html()
+        except Exception:
+            pass   # never block output over a syntax-highlight error
+
+    def _do_highlight_html(self):
+        widget = self._output
+        content = widget.get("1.0", "end")
+        for t in ("hl_tag", "hl_attr", "hl_val", "hl_comment"):
+            widget.tag_remove(t, "1.0", "end")
+
+        for m in re.finditer(r"(</?[A-Za-z][^>]*?>|<!--.*?-->)", content, re.DOTALL):
+            s = f"1.0+{m.start()}c"
+            e = f"1.0+{m.end()}c"
+            tok = m.group(0)
+            if tok.startswith("<!--"):
+                widget.tag_add("hl_comment", s, e)
+            else:
+                widget.tag_add("hl_tag", s, e)
+                # Attribute names & values inside the tag
+                for am in re.finditer(r'(\s+[A-Za-z\-]+)(="[^"]*")?', tok):
+                    as_ = f"1.0+{m.start() + am.start()}c"
+                    ae  = f"1.0+{m.start() + am.end(1)}c"
+                    widget.tag_add("hl_attr", as_, ae)
+                    if am.group(2):
+                        vs = f"1.0+{m.start() + am.end(1)}c"
+                        ve = f"1.0+{m.start() + am.end(2)}c"
+                        widget.tag_add("hl_val", vs, ve)
+
+    # ── Status flash ──────────────────────────────────────────────────────────
+    def _flash(self, msg: str, color: str = FG):
+        self._status.config(text=msg, fg=color)
+        self.after(4500, lambda: self._status.config(text=""))
+
+
+# =============================================================================
 #  HOME SCREEN
 # =============================================================================
 class HomeScreen(tk.Tk):
-    _WIN_W = 600
-    _WIN_H = 800
+    _CARD_SIZE = 200
+    _CARD_GAP  = 16
+    _COLUMNS   = 3
 
     def __init__(self):
         super().__init__()
         self.title("Image Tool")
         self.configure(bg=BG)
-        self.resizable(False, False)
+        self.resizable(True, True)
         self._apply_style()
         self._build()
-        # ── Centre on screen ──────────────────────────────────────────────
+        # ── Size to fit the actual grid content (up to the available
+        #    desktop area), so all tool cards are visible without an initial
+        #    scroll on a normal-height display; falls back to scrolling
+        #    (already wired on the canvas) only if the screen is smaller
+        #    than the content. ─────────────────────────────────────────────
         self.update_idletasks()
         sw = self.winfo_screenwidth()
         sh = self.winfo_screenheight()
-        x  = (sw - self._WIN_W) // 2
-        y  = max(0, (sh - self._WIN_H) // 2)
-        self.geometry(f"{self._WIN_W}x{self._WIN_H}+{x}+{y}")
+        content_h = self._tools_inner.winfo_reqheight()
+        # header (hero + section label) + grid content + bottom margin
+        wanted_h = self.winfo_reqheight() - self._tools_cv.winfo_reqheight() + content_h + 20
+        w = min(int(sw * 0.8), 1200)
+        h = min(max(wanted_h, 600), int(sh * 0.9))
+        x = (sw - w) // 2
+        y = max(0, (sh - h) // 2)
+        self.geometry(f"{w}x{h}+{x}+{y}")
+        scaled_minsize(self, 640, 480)
 
     def _apply_style(self):
         style = ttk.Style(self)
@@ -9234,53 +9514,54 @@ class HomeScreen(tk.Tk):
                         fieldbackground=BG3, background=BG3,
                         foreground=FG, selectbackground=ACCENT,
                         arrowcolor=FG)
+        for orient in ("Vertical", "Horizontal"):
+            name = f"Custom.{orient}.TScrollbar"
+            style.configure(name,
+                            background=BG3, troughcolor=BG2,
+                            bordercolor=BG2, arrowcolor=FG2,
+                            lightcolor=BG3, darkcolor=BG3)
+            style.map(name, background=[("active", BG4)])
 
     def _build(self):
         # ── Accent top bar ────────────────────────────────────────────────────
         tk.Frame(self, bg=ACCENT, height=3).pack(fill="x")
         # ── Hero banner ───────────────────────────────────────────────────────
-        hero = tk.Frame(self, bg=BG2)
+        hero = tk.Frame(self, bg=BG)
         hero.pack(fill="x")
-        hpad = styled_frame(hero, bg=BG2)
+        hpad = styled_frame(hero, bg=BG)
         hpad.pack(fill="x", padx=28, pady=(24, 20))
 
-        row1 = styled_frame(hpad, bg=BG2)
+        row1 = styled_frame(hpad, bg=BG)
         row1.pack(anchor="w")
         icon_box = tk.Frame(row1, bg=ACCENT, width=46, height=46)
         icon_box.pack_propagate(False)
         icon_box.pack(side="left", padx=(0, 14))
-        tk.Label(icon_box, text="🖼", bg=ACCENT, fg=FG,
+        tk.Label(icon_box, text="🖼", bg=ACCENT, fg="#ffffff",
                  font=("Segoe UI", 20)).pack(expand=True)
-        col = styled_frame(row1, bg=BG2)
+        col = styled_frame(row1, bg=BG)
         col.pack(side="left")
-        label(col, "Image Tool", font=("Segoe UI", 22, "bold"), bg=BG2).pack(anchor="w")
+        label(col, "Image Tool", font=("Segoe UI", 22, "bold"),
+              fg=FG, bg=BG).pack(anchor="w")
         label(col, _t("home.sub"),
-              fg=FG2, font=FONT_SM, bg=BG2).pack(anchor="w")
+              fg=FG2, font=FONT_SM, bg=BG).pack(anchor="w")
 
-        pills = styled_frame(hpad, bg=BG2)
+        pills = styled_frame(hpad, bg=BG)
         pills.pack(anchor="w", pady=(14, 0))
         for txt in _t("home.pills"):
-            p = tk.Frame(pills, bg=BG3)
+            p = tk.Frame(pills, bg=BG2, highlightbackground=BORDER,
+                        highlightthickness=1)
             p.pack(side="left", padx=(0, 8))
-            tk.Label(p, text=f"  {txt}  ", bg=BG3, fg=FG2,
+            tk.Label(p, text=f"  {txt}  ", bg=BG2, fg=FG2,
                      font=("Segoe UI", 8)).pack(padx=2, pady=4)
 
-        # Language toggle button (placed after pills, right-aligned)
-        lang_row = styled_frame(hpad, bg=BG2)
-        lang_row.pack(anchor="e", pady=(10, 0))
-        self._lang_btn = tk.Button(
-            lang_row, text=_t("home.lang_btn"),
-            command=self._toggle_lang,
-            bg=BG3, fg=FG, font=("Segoe UI", 9),
-            relief="flat", bd=0, padx=10, pady=4, cursor="hand2")
-        self._lang_btn.pack(side="right")
-
         # ── Section label ─────────────────────────────────────────────────────
-        tk.Frame(self, bg=BG3, height=1).pack(fill="x")  # hero bottom border
-        sec = styled_frame(self)
+        tk.Frame(self, bg=BORDER, height=1).pack(fill="x")  # hero bottom border
+        sec = styled_frame(self, bg=BG)
         sec.pack(fill="x", padx=28, pady=(20, 10))
-        label(sec, _t("home.tools"), fg=FG2, font=("Segoe UI", 8, "bold")).pack(side="left")
-        tk.Frame(sec, bg=ACCENT, height=1).pack(side="left", fill="x", expand=True, padx=(10, 0))
+        label(sec, _t("home.tools"), fg=FG2, font=("Segoe UI", 8, "bold"),
+              bg=BG).pack(side="left")
+        tk.Frame(sec, bg=ACCENT, height=1).pack(side="left", fill="x",
+                                                       expand=True, padx=(10, 0))
 
         # ── Tool cards in a scrollable area ───────────────────────────────────
         tools_outer = tk.Frame(self, bg=BG)
@@ -9326,78 +9607,72 @@ class HomeScreen(tk.Tk):
             ("📋", "Clipboard",   _t("home.clip_d"),       ClipboardManager,  "#f72585"),
             ("📄", "PDF Extractor", _t("home.pdf_d"),      PDFExtractorWizard,    "#f77f00"),
             ("🔗", "Link Redirector", _t("home.lrw_d"),    LinkRedirectorWizard,  "#9b5de5"),
+            ("🏷", "HTML Formatter",  _t("home.html_d"),   HtmlFormatterWizard,   "#43aa8b"),
         ]
-        for ico, title, desc, cls, color in tools:
-            self._tool_card(ico, title, desc, cls, color)
+        grid_frm = styled_frame(self._tools_inner, bg=BG)
+        grid_frm.pack(fill="x")
+        for col_i in range(self._COLUMNS):
+            grid_frm.columnconfigure(col_i, weight=1, uniform="cards")
+        for i, (ico, title, desc, cls, color) in enumerate(tools):
+            r, c = divmod(i, self._COLUMNS)
+            self._tool_card_grid(grid_frm, ico, title, desc, cls, color, r, c)
 
         # ── Pipeline ──────────────────────────────────────────────────────────
-        sep2 = styled_frame(self._tools_inner)
+        sep2 = styled_frame(self._tools_inner, bg=BG)
         sep2.pack(fill="x", pady=(18, 12))
-        label(sep2, _t("home.adv"), fg=FG2, font=("Segoe UI", 8, "bold")).pack(side="left")
-        tk.Frame(sep2, bg=BG3, height=1).pack(side="left", fill="x",
+        label(sep2, _t("home.adv"), fg=FG2, font=("Segoe UI", 8, "bold"),
+              bg=BG).pack(side="left")
+        tk.Frame(sep2, bg=BORDER, height=1).pack(side="left", fill="x",
                                               expand=True, padx=(10, 0))
 
-        pipe_frm = styled_frame(self._tools_inner)
+        pipe_frm = styled_frame(self._tools_inner, bg=BG)
         pipe_frm.pack(fill="x", pady=(0, 16))
-        btn(pipe_frm, _t("home.pipeline"), lambda: PipelineWizard(self),
-            primary=False).pack(side="left")
+        pipe_btn = tk.Button(
+            pipe_frm, text=_t("home.pipeline"), command=lambda: PipelineWizard(self),
+            bg=BG2, fg=FG, font=FONT_BODY,
+            relief="flat", bd=0, padx=14, pady=7, cursor="hand2",
+            highlightbackground=BORDER, highlightthickness=1,
+            activebackground=BORDER, activeforeground=FG)
+        pipe_btn.pack(side="left")
         label(pipe_frm, _t("home.pipe_desc"),
-              fg=FG2, font=FONT_SM).pack(side="left")
+              fg=FG2, font=FONT_SM, bg=BG).pack(side="left", padx=(10, 0))
 
-    def _toggle_lang(self):
-        global _LANG
-        _LANG = "ja" if _LANG == "en" else "en"
-        _update_font_constants()
-        for w in self.winfo_children():
-            w.destroy()
-        self._build()
+    def _tool_card_grid(self, parent, ico, title, desc, cls, accent_col, row, col):
+        outer = tk.Frame(parent, bg=BG2, cursor="hand2",
+                         width=self._CARD_SIZE, height=self._CARD_SIZE,
+                         highlightbackground=BORDER, highlightthickness=1)
+        outer.grid(row=row, column=col, padx=self._CARD_GAP // 2,
+                  pady=self._CARD_GAP // 2, sticky="nsew")
+        outer.grid_propagate(False)
 
-    def _tool_card(self, ico, title, desc, cls, accent_col):
-        outer = tk.Frame(self._tools_inner, bg=BG2, cursor="hand2")
-        outer.pack(fill="x", pady=3)
+        inner = styled_frame(outer, bg=BG2)
+        inner.place(relx=0.5, rely=0.5, anchor="center")
 
-        # Coloured left stripe
-        stripe = tk.Frame(outer, bg=accent_col, width=5)
-        stripe.pack(side="left", fill="y")
-        stripe.pack_propagate(False)
-
-        # Icon box — tinted with the card's own accent colour
-        icon_bg = _blend_hex(BG3, accent_col, 0.20)
-        icon_frm = tk.Frame(outer, bg=icon_bg, width=48, height=48)
+        icon_bg = _blend_hex(BG2, accent_col, 0.15)
+        icon_frm = tk.Frame(inner, bg=icon_bg, width=56, height=56)
         icon_frm.pack_propagate(False)
-        icon_frm.pack(side="left", padx=14, pady=11)
+        icon_frm.pack(pady=(0, 12))
         ico_lbl = tk.Label(icon_frm, text=ico, bg=icon_bg, fg=accent_col,
-                           font=("Segoe UI", 18))
+                           font=("Segoe UI", 22))
         ico_lbl.pack(expand=True)
 
-        # Text
-        txt_frm = tk.Frame(outer, bg=BG2)
-        txt_frm.pack(side="left", fill="both", expand=True, pady=11)
-        t_lbl = label(txt_frm, title, font=FONT_H2, bg=BG2)
-        t_lbl.pack(anchor="w")
-        d_lbl = label(txt_frm, desc, fg=FG2, font=FONT_SM, bg=BG2)
-        d_lbl.pack(anchor="w")
-
-        # Arrow
-        arrow = tk.Label(outer, text="›", bg=BG2, fg=BG3,
-                         font=("Segoe UI", 22), cursor="hand2")
-        arrow.pack(side="right", padx=16)
+        t_lbl = label(inner, title, font=FONT_H2, fg=FG, bg=BG2)
+        t_lbl.pack()
+        d_lbl = label(inner, desc, fg=FG2, font=FONT_HINT, bg=BG2,
+                     wraplength=self._CARD_SIZE - 32, justify="center")
+        d_lbl.pack(pady=(4, 0))
 
         def open_tool(): cls(self)
 
         def on_enter(e):
-            outer.config(bg=BG3); txt_frm.config(bg=BG3)
-            t_lbl.config(bg=BG3); d_lbl.config(bg=BG3)
-            arrow.config(bg=BG3, fg=accent_col)
-            icon_frm.config(bg=BG3); ico_lbl.config(bg=BG3)
+            outer.config(highlightbackground=accent_col)
+            t_lbl.config(fg=accent_col)
 
         def on_leave(e):
-            outer.config(bg=BG2); txt_frm.config(bg=BG2)
-            t_lbl.config(bg=BG2); d_lbl.config(bg=BG2)
-            arrow.config(bg=BG2, fg=BG3)
-            icon_frm.config(bg=icon_bg); ico_lbl.config(bg=icon_bg)
+            outer.config(highlightbackground=BORDER)
+            t_lbl.config(fg=FG)
 
-        for w in (outer, stripe, icon_frm, ico_lbl, txt_frm, t_lbl, d_lbl, arrow):
+        for w in (outer, inner, icon_frm, ico_lbl, t_lbl, d_lbl):
             w.bind("<Button-1>", lambda e: open_tool())
             w.bind("<Enter>",    on_enter)
             w.bind("<Leave>",    on_leave)
@@ -9405,9 +9680,43 @@ class HomeScreen(tk.Tk):
 # =============================================================================
 #  Entry point
 # =============================================================================
+def _parse_macro_args(argv):
+    """Positive detection of macro mode: an explicit --rename-macro flag
+    plus at least one path. A bare double-click (argv=[]) or any
+    unexpected argument Explorer might add must still fall through to the
+    normal HomeScreen launch -- never trigger the macro by accident."""
+    import argparse
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--rename-macro", action="store_true")
+    parser.add_argument("paths", nargs="*")
+    ns, _unknown = parser.parse_known_args(argv)
+    if ns.rename_macro and ns.paths:
+        return [Path(p) for p in ns.paths]
+    return None
+
+
 if __name__ == "__main__":
+    if sys.platform == "win32":
+        # Without this, Windows bitmap-scales the whole Tk UI on any display
+        # at >100% scaling, producing a blurry/low-res look. Must run before
+        # any Tk window is created.
+        try:
+            import ctypes
+            ctypes.windll.shcore.SetProcessDpiAwareness(1)  # PROCESS_SYSTEM_DPI_AWARE
+        except Exception:
+            try:
+                ctypes.windll.user32.SetProcessDPIAware()  # older Windows fallback
+            except Exception:
+                pass
+
     if not PILLOW_OK:
         subprocess.check_call([sys.executable, "-m", "pip", "install", "Pillow", "-q"])
         from PIL import Image
-    app = HomeScreen()
-    app.mainloop()
+
+    macro_paths = _parse_macro_args(sys.argv[1:])
+    if macro_paths is not None:
+        from app.wizards.rename_macro import launch_macro
+        launch_macro(macro_paths)
+    else:
+        app = HomeScreen()
+        app.mainloop()

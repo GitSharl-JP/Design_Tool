@@ -9,6 +9,15 @@ crash*.log
 startup_debug.log
 _igw_presets.json
 
+# Local secrets / machine-specific config -- never commit
+_lrw_config.json
+
+# Virtual environment
+.venv/
+
+# Test artifacts
+.pytest_cache/
+
 # OS
 Thumbs.db
 .DS_Store
