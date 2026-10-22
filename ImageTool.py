@@ -4844,6 +4844,7 @@ class GuideMarkWizard(tk.Toplevel):
         self._svg_center      = tk.BooleanVar(value=True)
         self._svg_outline     = tk.BooleanVar(value=False)
         self._svg_single      = tk.BooleanVar(value=True)   # one file for all pages
+        self._svg_artboards   = tk.BooleanVar(value=True)   # .jsx -> artboard per page
         self._svg_border_crop = tk.DoubleVar(value=0.8)     # hide baked-in frame
         self._preset_name     = tk.StringVar(value="")
         self._presets: list   = self._load_presets()
@@ -4997,6 +4998,7 @@ class GuideMarkWizard(tk.Toplevel):
             "svg_center":    self._svg_center.get(),
             "svg_outline":   self._svg_outline.get(),
             "svg_single":    self._svg_single.get(),
+            "svg_artboards": self._svg_artboards.get(),
             "svg_border_crop": self._svg_border_crop.get(),
             "template_path": self._selected_tpl.get("path", ""),
             "template3_path": self._selected_tpl3.get("path", ""),
@@ -5038,6 +5040,7 @@ class GuideMarkWizard(tk.Toplevel):
         _s(self._svg_center,    "svg_center")
         _s(self._svg_outline,   "svg_outline")
         _s(self._svg_single,    "svg_single")
+        _s(self._svg_artboards, "svg_artboards")
         _s(self._svg_border_crop, "svg_border_crop")
         tp = d.get("template_path", "")
         if tp and os.path.isfile(tp):
@@ -5900,6 +5903,12 @@ class GuideMarkWizard(tk.Toplevel):
                        variable=self._svg_single, bg=BG2, fg=FG,
                        selectcolor=BG3, activebackground=BG2,
                        font=FONT_SM).pack(side="left")
+        ab = tk.Frame(lp, bg=BG2)
+        ab.pack(fill="x", **P)
+        tk.Checkbutton(ab, text=_t("gmw.svg_artboards"),
+                       variable=self._svg_artboards, bg=BG2, fg=FG,
+                       selectcolor=BG3, activebackground=BG2,
+                       font=FONT_SM).pack(side="left")
 
         sec(_t("gmw.sec_export"))
         for txt, cmd in (
@@ -6385,14 +6394,20 @@ class GuideMarkWizard(tk.Toplevel):
             paths = export_svg_pages(self._sheet_items(), grid,
                                      self._font_path, opts,
                                      os.path.join(out_dir, base),
-                                     single_file=self._svg_single.get())
+                                     single_file=self._svg_single.get(),
+                                     with_artboard_script=(
+                                         self._svg_artboards.get()))
         except Exception as e:
             log.exception("SVG export failed")
             messagebox.showerror(_t("gmw.title"), str(e), parent=self)
             return
-        messagebox.showinfo(_t("gmw.title"),
-                            _t("gmw.done_svg", path=paths[0], n=len(paths)),
-                            parent=self)
+        scripts = [p for p in paths if p.endswith(".jsx")]
+        svgs = [p for p in paths if p.endswith(".svg")]
+        msg = _t("gmw.done_svg", path=svgs[0], n=len(svgs))
+        if scripts:
+            msg += "\n\n" + _t("gmw.done_jsx",
+                                 name=os.path.basename(scripts[0]))
+        messagebox.showinfo(_t("gmw.title"), msg, parent=self)
         try:
             os.startfile(out_dir)
         except OSError:

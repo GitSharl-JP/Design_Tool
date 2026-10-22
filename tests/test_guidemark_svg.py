@@ -256,3 +256,34 @@ def test_label_is_one_editable_text_block(tmp_path, kw, segs, label):
                for sp in t.iter(f"{{{gs.SVG_NS}}}tspan"))
     if len(segs) > 1:                             # raised suffix
         assert any(sp.get("baseline-shift") for sp in t.findall("s:tspan", NS))
+
+
+def test_artboard_script_describes_every_page():
+    jsx = gs.artboard_script(_grid(), 3, gs.SvgOptions(), "mes numéros.svg")
+    assert jsx.startswith("#target illustrator")
+    assert ("\" + \"mes num" + chr(92) + "u00e9ros.svg") in jsx   # ASCII-safe JS string
+    assert "N = 3" in jsx and "GAP = 36" in jsx
+    assert f"W = {gs._f(297 * 72 / 25.4)}" in jsx
+    assert f"H = {gs._f(210 * 72 / 25.4)}" in jsx
+    # braces / parentheses balanced (cheap syntax sanity check)
+    assert jsx.count("{") == jsx.count("}") and jsx.count("(") == jsx.count(")")
+
+
+def test_script_written_only_for_multi_page_single_file(tmp_path):
+    grid = _grid()
+    multi = _items_many(tmp_path, grid.per_page + 1)
+    one = _items_many(tmp_path, 2)
+    base = str(tmp_path / "s")
+    paths = gs.export_svg_pages(multi, grid, FONT, gs.SvgOptions(), base,
+                                single_file=True, with_artboard_script=True)
+    assert [os.path.basename(p) for p in paths] == ["s.svg", "s_artboards.jsx"]
+    assert "s.svg" in open(paths[1], encoding="utf-8").read()
+    # nothing for a single page, per-page files, or when switched off
+    assert len(gs.export_svg_pages(one, grid, FONT, gs.SvgOptions(), base,
+                                   with_artboard_script=True)) == 1
+    assert all(p.endswith(".svg") for p in gs.export_svg_pages(
+        multi, grid, FONT, gs.SvgOptions(), base, single_file=False,
+        with_artboard_script=True))
+    assert all(p.endswith(".svg") for p in gs.export_svg_pages(
+        multi, grid, FONT, gs.SvgOptions(), base,
+        with_artboard_script=False))
