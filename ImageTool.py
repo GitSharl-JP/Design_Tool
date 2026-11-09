@@ -115,6 +115,8 @@ from app.engines.guidemark_render import (
 from app.engines.guidemark_layout import PAPER_MM, make_grid, render_pages
 from app.engines.guidemark_svg import SvgOptions, export_svg_pages
 from app.engines.guidemark_paste import parse_labels
+from app.engines.imagegen_text import (
+    DEFAULT_LINE_SPACING, split_lines, autofit_font_size, draw_text_block)
 from app.engines.vector_template import (
     FILE_PATTERNS as _TPL_PATTERNS, load_thumbnail)
 from app.engines.font_jp import (
@@ -2038,7 +2040,8 @@ def _gen_image(number, width, height, bg_mode, bg_color, bg_image_path,
                shadow_on=False, shadow_color="#000000", shadow_offset_x=4, shadow_offset_y=4,
                shadow_blur=3,
                pos_manual=False, pos_x=None, pos_y=None,
-               auto_fit=False, letter_spacing=0, custom_text=""):
+               auto_fit=False, letter_spacing=0, custom_text="",
+               line_spacing=DEFAULT_LINE_SPACING):
     from PIL import Image as _Img, ImageDraw as _IDrw, ImageFilter as _IFilt
     if bg_mode == "color":
         rgb = _hex_to_rgb(bg_color)
@@ -2048,21 +2051,13 @@ def _gen_image(number, width, height, bg_mode, bg_color, bg_image_path,
         img = bg.resize((width, height), _Img.LANCZOS)
     draw = _IDrw.Draw(img)
     text = custom_text if custom_text else str(number)
-    # Auto-fit: shrink font_size so text stays within 88% of canvas
+    lines = split_lines(text)          # a label may contain line breaks
+    # Auto-fit: shrink font_size so the text block stays within 88% of canvas
     if auto_fit:
-        max_tw, max_th = int(width * 0.88), int(height * 0.88)
-        while font_size > 8:
-            _f = _load_pil_font(font_name, font_size)
-            try:
-                _bb = draw.textbbox((0, 0), text, font=_f)
-                _tw, _th = _bb[2] - _bb[0], _bb[3] - _bb[1]
-            except AttributeError:
-                _tw, _th = draw.textsize(text, font=_f)
-            # Account for tracking in width check (always applied)
-            _tw += letter_spacing * max(0, len(text) - 1)
-            if _tw <= max_tw and _th <= max_th:
-                break
-            font_size -= 2
+        font_size = autofit_font_size(
+            lines, lambda s: _load_pil_font(font_name, s), font_size,
+            int(width * 0.88), int(height * 0.88), letter_spacing,
+            line_spacing)
     font = _load_pil_font(font_name, font_size)
     # Centre point
     if pos_manual and pos_x is not None and pos_y is not None:
@@ -2074,9 +2069,9 @@ def _gen_image(number, width, height, bg_mode, bg_color, bg_image_path,
         sh_rgba  = _hex_to_rgb(shadow_color) + (200,)
         sh_layer = _Img.new("RGBA", img.size, (0, 0, 0, 0))
         sh_draw  = _IDrw.Draw(sh_layer)
-        _draw_tracked(sh_draw, text, font,
-                      cx + int(shadow_offset_x), cy + int(shadow_offset_y),
-                      sh_rgba, letter_spacing)
+        draw_text_block(sh_draw, lines, font,
+                        cx + int(shadow_offset_x), cy + int(shadow_offset_y),
+                        sh_rgba, letter_spacing, line_spacing)
         if shadow_blur > 0:
             # Blur only the alpha channel and keep RGB flat/uniform.
             # GaussianBlur on a straight (non-premultiplied) RGBA image blurs
@@ -2092,7 +2087,8 @@ def _gen_image(number, width, height, bg_mode, bg_color, bg_image_path,
         img = _Img.alpha_composite(img, sh_layer)
         draw = _IDrw.Draw(img)
     text_rgba = _hex_to_rgb(text_color) + (255,)
-    _draw_tracked(draw, text, font, cx, cy, text_rgba, letter_spacing)
+    draw_text_block(draw, lines, font, cx, cy, text_rgba, letter_spacing,
+                    line_spacing)
     if corner_mode == "rounded" and corner_radius > 0:
         img = _apply_rounded_mask(img, corner_radius)
     return img  # always RGBA
@@ -2370,6 +2366,7 @@ class ImageGenWizard(tk.Toplevel):
         self._fsize       = tk.StringVar(value="120")
         self._tcol        = tk.StringVar(value="#ffffff")
         self._tracking    = tk.IntVar(value=0)   # letter spacing in pixels
+        self._line_spacing = tk.DoubleVar(value=DEFAULT_LINE_SPACING)  # x font size
 
         # Drop-shadow
         self._shadow_on      = tk.BooleanVar(value=False)
@@ -2483,6 +2480,7 @@ class ImageGenWizard(tk.Toplevel):
             self._shadow_col, self._shadow_ox, self._shadow_oy, self._shadow_blur,
             self._pos_x, self._pos_y,
             self._corner, self._radius, self._guide_margin, self._tracking,
+            self._line_spacing,
         ]
         for var in watch:
             var.trace_add("write", lambda *_: self._schedule_preview())
@@ -2536,6 +2534,7 @@ class ImageGenWizard(tk.Toplevel):
             auto_fit=self._auto_fsize.get(),
             letter_spacing=self._tracking.get(),
             custom_text=self._custom_text_var.get().strip(),
+            line_spacing=self._spacing_value(),
         )
         guide_on     = self._guide_on.get()
         guide_margin = self._guide_margin.get()
@@ -2885,6 +2884,7 @@ class ImageGenWizard(tk.Toplevel):
             "out_folder": self._out_folder.get(),
             "guide_on": self._guide_on.get(), "guide_margin": self._guide_margin.get(),
             "tracking": self._tracking.get(),
+            "line_spacing": self._line_spacing.get(),
             "custom_text": self._custom_text_var.get(),
         }
 
@@ -2917,6 +2917,8 @@ class ImageGenWizard(tk.Toplevel):
             self._guide_margin.set(int(state["guide_margin"]))
         if "tracking" in state:
             self._tracking.set(int(state["tracking"]))
+        if "line_spacing" in state:
+            self._line_spacing.set(float(state["line_spacing"]))
         sv(self._custom_text_var, "custom_text")
         self._update_font_path()
         self._update_preview()
@@ -3149,12 +3151,31 @@ class ImageGenWizard(tk.Toplevel):
         # ── Custom text (optional — overrides number) ─────────────────────────
         ct_row = styled_frame(inner)
         ct_row.pack(anchor="w", fill="x", pady=(10, 0))
-        label(ct_row, _t("s2.custom_text")).pack(side="left")
-        tk.Entry(ct_row, textvariable=self._custom_text_var,
-                 bg=BG3, fg=FG, insertbackground=FG, relief="flat",
-                 font=FONT_BODY, width=36).pack(side="left", padx=6)
+        label(ct_row, _t("s2.custom_text")).pack(side="left", anchor="n")
+        # Multi-line box (Enter = line break), kept in sync with the
+        # StringVar that presets, previews and export already use.
+        ct_box = tk.Text(ct_row, height=3, width=36, wrap="word",
+                         bg=BG3, fg=FG, insertbackground=FG, relief="flat",
+                         font=FONT_BODY, undo=True)
+        ct_box.pack(side="left", padx=6)
+
+        def _box_to_var(_e=None):
+            if ct_box.edit_modified():
+                ct_box.edit_modified(False)
+                val = ct_box.get("1.0", "end-1c")
+                if val != self._custom_text_var.get():
+                    self._custom_text_var.set(val)
+
+        def _var_to_box(*_):
+            val = self._custom_text_var.get()
+            if val != ct_box.get("1.0", "end-1c"):
+                ct_box.delete("1.0", "end")
+                ct_box.insert("1.0", val)
+        ct_box.bind("<<Modified>>", _box_to_var)
+        self._custom_text_var.trace_add("write", _var_to_box)
+        _var_to_box()
         btn(ct_row, "✕", lambda: self._custom_text_var.set(""),
-            primary=False).pack(side="left")
+            primary=False).pack(side="left", anchor="n")
         label(inner, _t("s2.custom_text_hint"), fg=FG2, font=FONT_SM).pack(
             anchor="w", pady=(2, 0))
 
@@ -3210,6 +3231,12 @@ class ImageGenWizard(tk.Toplevel):
                    bg=BG3, fg=FG, insertbackground=FG, relief="flat",
                    buttonbackground=BG3, font=FONT_BODY).pack(side="left", padx=4)
         label(row_sty, "px", fg=FG2, font=FONT_SM).pack(side="left")
+        label(row_sty, _t("s2.line_spacing")).pack(side="left", padx=(16, 0))
+        tk.Spinbox(row_sty, textvariable=self._line_spacing,
+                   from_=0.5, to=3.0, increment=0.05, format="%.2f", width=5,
+                   bg=BG3, fg=FG, insertbackground=FG, relief="flat",
+                   buttonbackground=BG3, font=FONT_BODY).pack(side="left", padx=4)
+        label(row_sty, "\u00d7", fg=FG2, font=FONT_SM).pack(side="left")
         label(inner, _t("s2.tracking_hint"), fg=FG2, font=FONT_SM).pack(anchor="w", pady=(0, 2))
 
         # Initialise style list for default family
@@ -3885,6 +3912,13 @@ class ImageGenWizard(tk.Toplevel):
                 ]))
         self._schedule_preview(delay_ms=0)
 
+    def _spacing_value(self) -> float:
+        """Line spacing from the spinbox (falls back while it is mid-edit)."""
+        try:
+            return max(0.3, float(self._line_spacing.get()))
+        except (ValueError, tk.TclError):
+            return DEFAULT_LINE_SPACING
+
     # ── Execute ───────────────────────────────────────────────────────────────
     def _execute(self):
         ctext = self._custom_text_var.get().strip()
@@ -3941,6 +3975,7 @@ class ImageGenWizard(tk.Toplevel):
         p_y      = int(self._pos_y.get() or 0)
         auto_fit = self._auto_fsize.get()
         tracking = self._tracking.get()
+        lspace = self._spacing_value()
         ctext_snap = ctext  # snapshot for thread
 
         bg_pattern = list(self._bg_pattern)  # snapshot for thread
@@ -3966,7 +4001,8 @@ class ImageGenWizard(tk.Toplevel):
                                      shadow_blur=sh_bl,
                                      pos_manual=p_man, pos_x=p_x, pos_y=p_y,
                                      auto_fit=auto_fit, letter_spacing=tracking,
-                                     custom_text=ctext_snap)
+                                     custom_text=ctext_snap,
+                                     line_spacing=lspace)
                     dest = out_dir / f"{prefix}{'banner' if ctext_snap else number}{suffix}{ext}"
                     if fmt == "JPEG":
                         from PIL import Image as _Img
